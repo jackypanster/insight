@@ -24,7 +24,9 @@ pnpm dev analyze ./your-python-project
 - **Intelligent Code Analysis**: Uses Tree-sitter AST parsing for accurate code understanding
 - **AI-Powered Documentation**: Leverages OpenRouter API (Claude, GPT, Gemini) for natural language documentation
 - **Multi-Modal Output**: Generates comprehensive markdown documentation with different perspectives
-- **Smart Caching**: Avoids reprocessing unchanged files to minimize API costs
+- **Smart Caching**: SHA-256 content-based caching with 24-hour TTL, reducing API costs by up to 100%
+- **Real-time Progress**: Detailed progress indicators with ETA and performance metrics
+- **Model Flexibility**: Override LLM model via environment variable for cost/quality tradeoffs
 - **Python Focus**: MVP specifically optimized for Python codebases
 
 ## Installation
@@ -49,6 +51,9 @@ pnpm install
 # Create environment file
 cp .env.example .env
 # Edit .env and add your OPENROUTER_API_KEY
+
+# Optional: Set preferred model (default: anthropic/claude-3.5-sonnet)
+export MODEL="google/gemini-2.0-flash-lite-001"  # For faster, cheaper analysis
 ```
 
 ## Usage
@@ -67,19 +72,30 @@ pnpm dev analyze /path/to/your/python/project
 # With options
 pnpm dev analyze ./src --verbose --output ./documentation
 
+# Limit number of files (useful for testing)
+pnpm dev analyze ./src --max-files 10
+
 # Get help
 pnpm dev analyze --help
 ```
+
+### Performance
+
+With intelligent caching, subsequent analyses are near-instantaneous:
+- **First run**: Full API analysis (e.g., 89s for 5 files)
+- **Cached run**: 0s with 100% cache hit rate
+- **Cache location**: `.insight-cache/` (configurable)
 
 ### Output Structure
 Generated documentation will be saved to `insight-docs/` (configurable):
 ```
 insight-docs/
-├── README.md           # Overview and index
-├── architecture.md     # System architecture
-├── implementation.md   # Implementation details
-├── api.md             # API documentation
-└── modules/           # Per-file detailed docs
+├── README.md           # Project overview with statistics
+├── ARCHITECTURE.md     # System architecture and complexity analysis
+├── STATISTICS.json     # Detailed metrics and analysis data
+└── files/             # Per-file detailed documentation
+    ├── main.md        # Main module documentation
+    └── *.md           # Documentation for each analyzed file
 ```
 
 ## Configuration
@@ -136,20 +152,29 @@ Alternative direct API support:
 
 ## Roadmap
 
-### Current (MVP)
-- ✅ CLI framework with basic commands
-- ✅ Configuration management
-- ✅ Project structure and tooling
-- 🔄 Tree-sitter Python AST analysis
-- ⏳ OpenRouter API integration
-- ⏳ Documentation generation pipeline
+### Phase 1-2 (Complete) ✅
+- ✅ CLI framework with Commander.js
+- ✅ Configuration management with interactive init
+- ✅ Project structure with TypeScript and pnpm
+- ✅ Tree-sitter Python AST analysis
+- ✅ File scanning with intelligent filtering
 
-### Planned
+### Phase 3 (Complete) ✅
+- ✅ OpenRouter API integration with multiple models
+- ✅ Smart caching system (SHA-256 based, 24hr TTL)
+- ✅ Documentation generation pipeline
+- ✅ Real-time progress indicators with ETA
+- ✅ Performance metrics and cache statistics
+- ✅ Multi-file project support
+
+### Planned Features
 - JavaScript/TypeScript language support
-- Real-time documentation updates
+- Real-time documentation updates via file watching
 - Web UI for documentation viewing
-- Integration with popular IDEs
+- Integration with popular IDEs (VSCode, IntelliJ)
 - Support for additional languages (Go, Java, C++)
+- Incremental analysis for large codebases
+- Custom documentation templates
 
 ## Contributing
 

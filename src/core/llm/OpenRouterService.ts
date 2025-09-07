@@ -1,7 +1,9 @@
 import fs from 'fs-extra';
 import { logger } from '@/utils/logger.js';
+import { getCacheManager } from '@/services/cache/CacheManager.js';
 import type { LLMConfig } from '@/types/index.js';
 import type { AnalysisResult } from '../analyzer/ASTAnalyzer.js';
+import type { CacheManager } from '@/services/cache/CacheManager.js';
 
 export interface CodeContext {
   filePath: string;
@@ -44,18 +46,44 @@ export class OpenRouterService {
   private baseURL = 'https://openrouter.ai/api/v1';
   private requestCount = 0;
   private lastRequestTime = 0;
+  private cache: CacheManager;
 
   constructor(config: LLMConfig) {
     this.config = config;
+    this.cache = getCacheManager();
     
     if (!process.env.OPENROUTER_API_KEY) {
       throw new Error('OPENROUTER_API_KEY environment variable is required');
+    }
+
+    logger.info(`OpenRouter initialized with model: ${config.models.primary}`);
+    if (config.models.fallback) {
+      logger.debug(`Fallback model: ${config.models.fallback}`);
     }
   }
 
   async analyzeCode(context: CodeContext): Promise<LLMAnalysis> {
     const startTime = Date.now();
-    logger.info(`Analyzing code with LLM: ${context.filePath}`);
+    logger.info(`Analyzing ${context.filePath} with ${this.config.models.primary}`);
+
+    // Generate cache key from file content and AST
+    const cacheKey = this.cache.generateKey(context.content, {
+      model: this.config.models.primary,
+      filePath: context.filePath,
+      language: context.language,
+      astHash: JSON.stringify({
+        functions: context.ast.functions.length,
+        classes: context.ast.classes.length,
+        complexity: context.ast.complexity,
+      }),
+    });
+
+    // Check cache first
+    const cached = await this.cache.get<LLMAnalysis>(cacheKey);
+    if (cached) {
+      logger.info(`Using cached analysis for ${context.filePath}`);
+      return cached;
+    }
 
     try {
       // Rate limiting
@@ -69,6 +97,9 @@ export class OpenRouterService {
       });
 
       const analysis = this.parseAnalysisResponse(response, context);
+      
+      // Cache the successful response
+      await this.cache.set(cacheKey, analysis, 86400); // Cache for 24 hours
       
       const duration = Date.now() - startTime;
       logger.info(`LLM analysis completed for ${context.filePath}: ${duration}ms`);

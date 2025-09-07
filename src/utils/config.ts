@@ -48,10 +48,12 @@ export async function loadConfig(configPath?: string): Promise<InsightConfig> {
   const defaultPath = path.resolve(process.cwd(), 'insight.config.json');
   const finalPath = configPath || defaultPath;
 
+  let config = DEFAULT_CONFIG;
+
   try {
     if (await fs.pathExists(finalPath)) {
       const configData = await fs.readJson(finalPath);
-      return { ...DEFAULT_CONFIG, ...configData };
+      config = { ...DEFAULT_CONFIG, ...configData };
     }
   } catch (error) {
     console.warn(
@@ -60,7 +62,22 @@ export async function loadConfig(configPath?: string): Promise<InsightConfig> {
     );
   }
 
-  return DEFAULT_CONFIG;
+  // Override with environment variables if present
+  if (process.env.MODEL) {
+    config = {
+      ...config,
+      llm: {
+        ...config.llm,
+        models: {
+          ...config.llm.models,
+          primary: process.env.MODEL,
+        },
+      },
+    };
+    console.log(`Using model from environment: ${process.env.MODEL}`);
+  }
+
+  return config;
 }
 
 export async function saveConfig(

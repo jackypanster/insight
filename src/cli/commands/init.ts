@@ -129,6 +129,7 @@ export function createInitCommand(): Command {
         switch (answers.llmProvider) {
           case 'openrouter':
             logger.info('   export OPENROUTER_API_KEY="your-key-here"');
+            logger.info('   export MODEL="google/gemini-2.0-flash-lite-001"  # Or your preferred model');
             break;
           case 'anthropic':
             logger.info('   export ANTHROPIC_API_KEY="your-key-here"');
@@ -139,6 +140,11 @@ export function createInitCommand(): Command {
         }
 
         logger.info('2. Run: insight analyze <your-project-path>');
+        logger.info('');
+        logger.info('  💡 Tips:');
+        logger.info('    • Use MODEL env var to override the primary model');
+        logger.info('    • Cached responses reduce API costs significantly');
+        logger.info('    • Use --max-files to limit analysis for testing');
       } catch (error) {
         logger.error('Failed to initialize configuration:', error);
         process.exit(1);

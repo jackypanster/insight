@@ -1,4 +1,5 @@
 import Parser from 'tree-sitter';
+// @ts-ignore - no types available
 import Python from 'tree-sitter-python';
 import fs from 'fs-extra';
 import path from 'path';
@@ -88,7 +89,7 @@ export class ASTAnalyzer {
       const tree = this.pythonParser.parse(content);
       const rootNode = tree.rootNode;
 
-      if (rootNode.hasError) {
+      if (rootNode.hasError()) {
         logger.warn(`Parse errors in file: ${fileInfo.path}`);
       }
 
@@ -109,7 +110,7 @@ export class ASTAnalyzer {
         globalVariables,
         complexity,
         lines,
-        errors: rootNode.hasError ? ['Parse errors detected'] : [],
+        errors: rootNode.hasError() ? ['Parse errors detected'] : [],
       };
 
       const duration = Date.now() - startTime;
@@ -419,7 +420,7 @@ export class ASTAnalyzer {
 
   private extractDocstring(node: Parser.SyntaxNode, sourceCode: string): string | undefined {
     // Look for string literals at the beginning of the body
-    const traverse = (node: Parser.SyntaxNode, depth: number = 0) => {
+    const traverse = (node: Parser.SyntaxNode, depth: number = 0): string | undefined => {
       if (depth < 3 && node.type === 'string') {
         let docstring = node.text;
         // Clean up the docstring

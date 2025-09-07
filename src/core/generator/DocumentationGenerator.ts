@@ -520,7 +520,6 @@ ${fileDoc.recommendations.map(rec => `- ${rec}`).join('\n')}
       outputDir: this.config.generation.outputDir,
       format: this.config.generation.format,
       templatesLoaded: Object.keys(this.templates).length,
-      includeDiagrams: this.config.generation.includeDiagrams,
     };
   }
 }
