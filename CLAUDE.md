@@ -4,15 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Insight** is an AI-powered legacy code documentation generator that automatically analyzes codebases and generates comprehensive, multi-dimensional documentation. The project is currently in the planning/design phase with no implementation yet.
+**Insight** is an AI-powered legacy code documentation generator that automatically analyzes codebases and generates comprehensive, multi-dimensional documentation. The project uses Node.js/TypeScript with pnpm package management.
 
 ## Repository Structure
 
-This repository contains planning and research documentation:
+This repository contains:
+- `docs/` - Project documentation including tech decision records
 - `prd.md` / `prd.zh.md` - Product Requirements Document (English/Chinese)
 - `research.md` / `research.zh.md` - Technical research and implementation strategy  
 - `arch.md` / `arch.zh.md` - Technical architecture specification
-- Planning documents for a TypeScript/Node.js CLI tool
+- `src/` - Source code (Node.js/TypeScript implementation)
 
 ## Planned Architecture
 
@@ -24,36 +25,41 @@ This repository contains planning and research documentation:
 - **CLI Interface** - Command-line tool using Commander.js
 
 ### Technology Stack
-- **Runtime**: Node.js with TypeScript
-- **AST Parsing**: Tree-sitter (Python, JavaScript, TypeScript, Go, Java)
-- **LLM Integration**: Claude API (@anthropic-ai/sdk)
+- **Runtime**: Node.js 20+ with TypeScript
+- **Package Manager**: pnpm (strict dependency isolation)
+- **AST Parsing**: Tree-sitter (starting with Python support)
+- **LLM Integration**: OpenRouter API (supports Claude, GPT, Gemini)
 - **CLI Framework**: Commander.js, Inquirer, Ora, Chalk
-- **Documentation**: Handlebars templates, Mermaid diagrams
+- **Documentation**: Handlebars templates
 - **Testing**: Vitest
+- **Development**: tsx for TypeScript execution
 
 ### Data Processing Pipeline
 ```
 Repository → Scanner → AST Parser → Chunk Manager → 
-Context Builder → Claude API → Template Processor → Markdown Files
+Context Builder → OpenRouter API → Template Processor → Markdown Files
 ```
 
-## Development Commands (When Implementation Begins)
+## Development Commands
 
 ### Setup
 ```bash
-# Prerequisites: Node.js 18+
-npm install
+# Prerequisites: Node.js 20+ and pnpm
+npm install -g pnpm
+nvm use 20  # or install Node.js 20+
+pnpm install
 cp .env.example .env
-# Add CLAUDE_API_KEY to .env
+# Add OPENROUTER_API_KEY to .env
 ```
 
 ### Development
 ```bash
-npm run dev          # Development mode
-npm run build        # Build TypeScript
-npm run test         # Run test suite
-npm run lint         # ESLint checks
-npm run type-check   # TypeScript validation
+pnpm dev             # Development mode (tsx)
+pnpm build           # Build TypeScript
+pnpm test            # Run test suite with Vitest
+pnpm lint            # ESLint checks
+pnpm format          # Prettier formatting
+pnpm type-check      # TypeScript validation
 ```
 
 ### CLI Usage (Planned)
@@ -66,20 +72,29 @@ insight serve --port 3000       # Serve generated docs
 insight watch <path>            # Watch mode for continuous updates
 ```
 
-## Planned Directory Structure
+## Directory Structure
 
 ```
-src/
-├── cli/                 # CLI commands and interface
-├── scanner/            # Repository scanning (RepositoryScanner, FileFilter)
-├── analyzer/           # AST analysis (ASTAnalyzer, ChunkManager)
-├── generator/          # Documentation generation (DocumentGenerator, DiagramGenerator)
-├── cache/              # Caching system (FileHashCache, LLMResponseCache)
-├── llm/                # Claude API integration (ClaudeService)
-└── utils/              # Shared utilities and types
-
-tests/                  # Unit and integration tests
-templates/              # Handlebars documentation templates
+insight/
+├── docs/                    # Project documentation
+│   └── tech-decision.md    # Technology decisions and rationale
+├── src/
+│   ├── cli/                # CLI entry point and commands
+│   │   ├── index.ts       # Main CLI entry
+│   │   └── commands/      # Individual commands
+│   ├── core/
+│   │   ├── scanner/       # File scanning and filtering
+│   │   ├── analyzer/      # Tree-sitter AST analysis
+│   │   └── generator/     # Documentation generation
+│   ├── services/
+│   │   ├── llm/          # OpenRouter API integration
+│   │   └── cache/        # File hash and response caching
+│   ├── utils/            # Shared utilities
+│   └── types/            # TypeScript type definitions
+├── templates/            # Handlebars documentation templates
+├── tests/                # Test files (unit/integration)
+├── examples/             # Example Python projects for testing
+└── scripts/              # Development and build scripts
 ```
 
 ## Test Repositories for MVP
@@ -94,9 +109,10 @@ The research identifies these repositories for initial testing:
 ## Key Implementation Considerations
 
 ### Language Support Priority
-- **P0**: Python, JavaScript, TypeScript, Go (primary MVP languages)
-- **P1**: Java, C/C++ (secondary languages)
-- **P2**: Legacy languages (COBOL, Fortran) for enterprise market
+- **MVP**: Python only (using Tree-sitter Python parser)
+- **P1**: JavaScript, TypeScript (expand Tree-sitter support)
+- **P2**: Go, Java, C/C++ (additional languages)
+- **P3**: Legacy languages (COBOL, Fortran) for enterprise market
 
 ### Documentation Output Structure
 ```
@@ -127,8 +143,8 @@ project/
 
 ### Environment Variables
 ```bash
-CLAUDE_API_KEY=sk-ant-xxxxx     # Required for Claude API
-INSIGHT_LOG_LEVEL=info          # Logging verbosity
+OPENROUTER_API_KEY=sk-or-xxxxx  # Required for OpenRouter API
+INSIGHT_LOG_LEVEL=info          # Logging verbosity  
 INSIGHT_CACHE_DIR=.insight-cache # Cache location
 INSIGHT_MAX_WORKERS=4           # Concurrent processing
 ```
@@ -137,32 +153,41 @@ INSIGHT_MAX_WORKERS=4           # Concurrent processing
 ```json
 {
   "llm": {
-    "provider": "claude",
-    "model": "claude-3-sonnet-20240229",
+    "provider": "openrouter",
+    "models": {
+      "primary": "anthropic/claude-3.5-sonnet",
+      "fallback": "openai/gpt-3.5-turbo"
+    },
     "maxTokens": 4000,
     "temperature": 0.3
   },
   "scanning": {
-    "ignorePaths": ["node_modules", ".git", "dist", "build"],
-    "includeExtensions": [".js", ".ts", ".py", ".go", ".java"]
+    "ignorePaths": ["node_modules", ".git", "dist", "build", "__pycache__"],
+    "includeExtensions": [".py"],
+    "maxFileSize": "1MB"
   },
   "generation": {
-    "outputDir": "report",
-    "includeDiagrams": true,
-    "diagramFormat": "mermaid"
+    "outputDir": "insight-docs",
+    "format": "markdown",
+    "templates": "templates/"
+  },
+  "cache": {
+    "enabled": true,
+    "location": ".insight-cache"
   }
 }
 ```
 
 ## Development Status
 
-**Current Phase**: Pre-implementation planning  
+**Current Phase**: Project initialization (Week 1)
 **Next Steps**:
-1. Initialize Node.js/TypeScript project structure
-2. Implement basic CLI framework with Commander.js
-3. Add Claude API integration with caching
-4. Create Tree-sitter AST analysis for Python/JavaScript
-5. Build MVP with identified test repositories
+1. ✅ Create project structure and configuration
+2. 🔄 Initialize pnpm project with dependencies  
+3. ⏳ Implement basic CLI framework with Commander.js
+4. ⏳ Add OpenRouter API integration
+5. ⏳ Create Tree-sitter AST analysis for Python
+6. ⏳ Build MVP with calmjs test repository
 
 ## Performance Requirements
 
