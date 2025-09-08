@@ -97,3 +97,10 @@ export interface AnalyzeOptions extends CliOptions {
   errorReport?: boolean;
   stopOnError?: boolean;
 }
+
+export interface ServeOptions extends CliOptions {
+  port?: number;
+  host?: string;
+  docsDir?: string;
+  open?: boolean;
+}
