@@ -21,13 +21,23 @@ pnpm dev analyze ./your-python-project
 
 ## Features
 
-- **Intelligent Code Analysis**: Uses Tree-sitter AST parsing for accurate code understanding
+### 🧠 **Enhanced Python Intelligence** (Phase 4)
+- **Advanced Code Analysis**: Tree-sitter AST parsing with deep Python feature support (async/await, type annotations, decorators)
+- **Framework Detection**: Automatically detects Django, Flask, FastAPI, Data Science stack and tailors documentation
+- **Design Pattern Recognition**: Identifies 23+ patterns including Singleton, Factory, Observer, Context Manager
+- **Python Version Detection**: Smart detection of Python 2.7 vs 3.x with feature-specific identification
+
+### 📊 **Visual Documentation** (Phase 4)
+- **Mermaid Diagram Generation**: Class inheritance, module dependency, and architecture diagrams
+- **GitHub-Native Rendering**: Diagrams render directly in GitHub markdown for seamless viewing
+- **Multi-Dimensional Views**: Architecture overview, component classification, dependency analysis
+
+### ⚡ **Performance & Intelligence**
 - **AI-Powered Documentation**: Leverages OpenRouter API (Claude, GPT, Gemini) for natural language documentation
-- **Multi-Modal Output**: Generates comprehensive markdown documentation with different perspectives
 - **Smart Caching**: SHA-256 content-based caching with 24-hour TTL, reducing API costs by up to 100%
 - **Real-time Progress**: Detailed progress indicators with ETA and performance metrics
 - **Model Flexibility**: Override LLM model via environment variable for cost/quality tradeoffs
-- **Python Focus**: MVP specifically optimized for Python codebases
+- **Intelligent Recommendations**: Code quality suggestions based on complexity and architecture analysis
 
 ## Installation
 
@@ -90,12 +100,16 @@ With intelligent caching, subsequent analyses are near-instantaneous:
 Generated documentation will be saved to `insight-docs/` (configurable):
 ```
 insight-docs/
-├── README.md           # Project overview with statistics
-├── ARCHITECTURE.md     # System architecture and complexity analysis
-├── STATISTICS.json     # Detailed metrics and analysis data
+├── README.md           # Project overview with statistics and framework detection
+├── ARCHITECTURE.md     # Enhanced architecture with Mermaid diagrams and patterns
+│                      # • Class inheritance diagrams
+│                      # • Module dependency graphs
+│                      # • Component classification
+│                      # • Design pattern analysis
+├── STATISTICS.json     # Detailed metrics with complexity distribution
 └── files/             # Per-file detailed documentation
-    ├── main.md        # Main module documentation
-    └── *.md           # Documentation for each analyzed file
+    ├── main.md        # Main module with framework-aware analysis
+    └── *.md           # Each file with pattern recognition and recommendations
 ```
 
 ## Configuration
@@ -167,14 +181,22 @@ Alternative direct API support:
 - ✅ Performance metrics and cache statistics
 - ✅ Multi-file project support
 
-### Planned Features
-- JavaScript/TypeScript language support
-- Real-time documentation updates via file watching
-- Web UI for documentation viewing
-- Integration with popular IDEs (VSCode, IntelliJ)
-- Support for additional languages (Go, Java, C++)
-- Incremental analysis for large codebases
-- Custom documentation templates
+### Phase 4 (Complete) ✅ **Deep Python MVP Optimization**
+- ✅ Enhanced Python AST analysis with advanced features
+- ✅ Framework detection (Django, Flask, FastAPI, Data Science)
+- ✅ Design pattern recognition (23+ patterns)
+- ✅ Mermaid diagram generation (4 diagram types)
+- ✅ Architecture analysis with component classification
+- ✅ Python version detection and feature analysis
+- ✅ Intelligent code quality recommendations
+
+### Phase 5: Production Features (Next)
+- 🌐 Web UI for documentation viewing (`insight serve`)
+- 👁️ Real-time documentation updates via file watching
+- 🟨 JavaScript/TypeScript language support
+- 🔧 Integration with popular IDEs (VSCode, IntelliJ)
+- 📦 Support for additional languages (Go, Java, C++)
+- ⚡ Performance optimization for 10K+ line codebases
 
 ## Contributing
 
