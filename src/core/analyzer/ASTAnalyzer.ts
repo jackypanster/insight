@@ -94,7 +94,6 @@ export interface AnalysisResult {
   framework?: FrameworkInfo;
   patterns: string[]; // Design patterns detected
   typeAnnotations: boolean; // Uses type annotations
-  pythonVersion?: string; // Detected Python version
   analysisStatus: 'success' | 'partial' | 'failed';
   errorMessage?: string;
 }
@@ -266,7 +265,6 @@ export class ASTAnalyzer {
       let framework: FrameworkInfo | undefined;
       let patterns: string[] = [];
       let typeAnnotations = false;
-      let pythonVersion: string | undefined;
 
       try {
         framework = this.detectFramework(imports, content);
@@ -286,11 +284,6 @@ export class ASTAnalyzer {
         logger.debug(`Failed to detect type annotations for ${fileInfo.path}: ${error}`);
       }
 
-      try {
-        pythonVersion = this.detectPythonVersion(content, rootNode);
-      } catch (error) {
-        logger.debug(`Failed to detect Python version for ${fileInfo.path}: ${error}`);
-      }
 
       // Determine analysis status
       let analysisStatus: 'success' | 'partial' | 'failed' = 'success';
@@ -315,7 +308,6 @@ export class ASTAnalyzer {
         framework,
         patterns,
         typeAnnotations,
-        pythonVersion,
         analysisStatus
       };
 
@@ -973,32 +965,6 @@ export class ASTAnalyzer {
     return hasTypedFunctions || hasTypedAttributes;
   }
   
-  private detectPythonVersion(content: string, rootNode: Parser.SyntaxNode): string {
-    // Check for Python 3+ syntax
-    if (content.includes('async def') || content.includes('await ')) {
-      return '3.5+';
-    }
-    
-    if (content.includes('f"') || content.includes("f'")) {
-      return '3.6+';
-    }
-    
-    if (content.includes(':=')) { // Walrus operator
-      return '3.8+';
-    }
-    
-    if (content.includes('match ') && content.includes('case ')) {
-      return '3.10+';
-    }
-    
-    // Check for print statement vs function
-    const hasPrintStatement = this.findDeepChildByType(rootNode, 'print_statement');
-    if (hasPrintStatement) {
-      return '2.7';
-    }
-    
-    return '3.x';
-  }
 
   // Get analysis statistics
   getAnalysisStats(results: AnalysisResult[]): Record<string, any> {

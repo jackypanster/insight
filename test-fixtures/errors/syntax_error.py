@@ -25,9 +25,6 @@ def broken_method(self):
 # Missing closing parenthesis
 print("This line is fine"
 
-# Invalid Python 2 style print (should cause parsing issues in Python 3)
-print "This is Python 2 syntax"
-
 # More complex syntax error
 if True
     print("Missing colon in if statement")

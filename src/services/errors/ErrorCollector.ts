@@ -3,7 +3,6 @@ import path from 'path';
 import { logger } from '@/utils/logger.js';
 
 export interface ErrorContext {
-  pythonVersion?: string;
   fileSize?: number;
   lineCount?: number;
   encoding?: string;
@@ -39,7 +38,6 @@ export type ErrorCategory =
   | 'parsing_error'
   | 'syntax_error' 
   | 'encoding_error'
-  | 'version_incompatibility'
   | 'timeout_error'
   | 'memory_error'
   | 'file_access_error'
@@ -208,10 +206,6 @@ export class ErrorCollector {
     if (message.includes('parse') || message.includes('tree-sitter')) {
       return 'parsing_error';
     }
-    
-    if (message.includes('python 2') || message.includes('version')) {
-      return 'version_incompatibility';
-    }
 
     return 'unknown_error';
   }
@@ -222,8 +216,8 @@ export class ErrorCollector {
   private isRetryable(error: Error): boolean {
     const message = error.message.toLowerCase();
     
-    // Syntax errors and version incompatibility are not retryable
-    if (message.includes('syntax') || message.includes('python 2')) {
+    // Syntax errors are not retryable
+    if (message.includes('syntax')) {
       return false;
     }
     
