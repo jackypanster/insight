@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import dotenv from 'dotenv';
 import { createAnalyzeCommand } from './commands/analyze.js';
 import { createInitCommand } from './commands/init.js';
+import { createServeCommand } from './commands/serve.js';
 import { logger } from '@/utils/logger.js';
 
 // Load environment variables
@@ -19,6 +20,7 @@ program
 // Register commands
 program.addCommand(createInitCommand());
 program.addCommand(createAnalyzeCommand());
+program.addCommand(createServeCommand());
 
 // Global error handler
 process.on('uncaughtException', (error) => {
