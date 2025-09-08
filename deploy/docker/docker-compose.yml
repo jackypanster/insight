@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Production service
+  insight:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: production
+    image: insight:latest
+    container_name: insight-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - INSIGHT_LOG_LEVEL=${INSIGHT_LOG_LEVEL:-info}
+      - INSIGHT_CACHE_DIR=/app/.insight-cache
+      - INSIGHT_MAX_WORKERS=${INSIGHT_MAX_WORKERS:-4}
+    volumes:
+      # Persistent data volumes
+      - insight_docs:/app/insight-docs
+      - insight_cache:/app/.insight-cache
+      # Mount user's projects for analysis
+      - ${HOST_PROJECT_PATH:-../../examples}:/app/projects:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pnpm", "dev", "serve", "--help"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Development service
+  insight-dev:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.dev
+    image: insight:dev
+    container_name: insight-dev
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Node.js debug port
+    environment:
+      - NODE_ENV=development
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - INSIGHT_LOG_LEVEL=${INSIGHT_LOG_LEVEL:-debug}
+      - INSIGHT_CACHE_DIR=/app/.insight-cache
+      - INSIGHT_MAX_WORKERS=${INSIGHT_MAX_WORKERS:-2}
+    volumes:
+      # Mount source code for hot reload
+      - ../..:/app
+      # Persistent volumes for node_modules and cache
+      - node_modules_dev:/app/node_modules
+      - pnpm_store_dev:/root/.pnpm-store
+      - insight_cache_dev:/app/.insight-cache
+      - insight_docs_dev:/app/insight-docs
+    stdin_open: true
+    tty: true
+    command: ["dev-start"]
+
+  # Test service
+  insight-test:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.dev
+    image: insight:test
+    container_name: insight-test
+    environment:
+      - NODE_ENV=test
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    volumes:
+      - ../..:/app
+      - node_modules_test:/app/node_modules
+      - pnpm_store_test:/root/.pnpm-store
+    profiles: ["test"]
+    command: ["sh", "-c", "pnpm install && pnpm test"]
+
+volumes:
+  # Production volumes
+  insight_docs:
+    driver: local
+  insight_cache:
+    driver: local
+  
+  # Development volumes
+  node_modules_dev:
+    driver: local
+  pnpm_store_dev:
+    driver: local
+  insight_cache_dev:
+    driver: local
+  insight_docs_dev:
+    driver: local
+  
+  # Test volumes
+  node_modules_test:
+    driver: local
+  pnpm_store_test:
+    driver: local
+
+networks:
+  default:
+    name: insight-network
