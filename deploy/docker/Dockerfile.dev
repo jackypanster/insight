@@ -41,7 +41,9 @@ echo "🚀 Starting development server..."\n\
 echo "   - Web server: http://localhost:3000"\n\
 echo "   - Debug port: 9229"\n\
 echo "   - Hot reload: enabled"\n\
-exec pnpm dev' > /usr/local/bin/dev-start && \
+echo ""\n\
+echo "Starting web server with sample documentation..."\n\
+exec tsx src/cli/index.ts serve --port 3000 --host 0.0.0.0 --docs-dir examples' > /usr/local/bin/dev-start && \
     chmod +x /usr/local/bin/dev-start
 
 # Default command for development
