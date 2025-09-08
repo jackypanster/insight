@@ -37,7 +37,15 @@
     "quality": "pnpm run lint && pnpm run type-check && pnpm run test:coverage",
     "quality:fix": "pnpm run lint:fix && pnpm run format && pnpm run type-check && pnpm run test",
     "prepublishOnly": "pnpm run quality && pnpm run clean && pnpm run build",
-    "precommit": "pnpm run lint:fix && pnpm run format && pnpm run type-check && pnpm run test:unit"
+    "precommit": "pnpm run lint:fix && pnpm run format && pnpm run type-check && pnpm run test:unit",
+    "docker:dev": "./deploy/scripts/docker-dev.sh",
+    "docker:build": "./deploy/scripts/docker-build.sh",
+    "docker:test": "./deploy/scripts/docker-test.sh",
+    "docker:clean": "./deploy/scripts/docker-clean.sh",
+    "docker:dev:rebuild": "./deploy/scripts/docker-dev.sh --rebuild",
+    "docker:dev:bg": "./deploy/scripts/docker-dev.sh --background",
+    "docker:build:prod": "./deploy/scripts/docker-build.sh --prod",
+    "docker:build:dev": "./deploy/scripts/docker-build.sh --dev"
   },
   "keywords": [
     "documentation",

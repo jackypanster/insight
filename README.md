@@ -2,7 +2,35 @@
 
 AI-powered legacy code documentation generator that automatically analyzes codebases and generates comprehensive, multi-dimensional documentation.
 
-## Quick Start
+## 🐳 Quick Start (Docker - 推荐)
+
+使用 Docker 一键启动，无需担心环境配置问题：
+
+```bash
+# 克隆项目
+git clone <repository-url>
+cd insight
+
+# 设置 API Key
+cp .env.example .env
+# 编辑 .env 添加 OPENROUTER_API_KEY
+
+# 一键启动开发环境
+pnpm docker:dev
+
+# 或直接使用脚本
+./deploy/scripts/docker-dev.sh
+```
+
+**就这么简单！** Docker 环境会自动：
+- 解决所有原生模块编译问题
+- 提供一致的 Node.js 20 + Python 3 环境
+- 支持热重载和调试
+- 在 http://localhost:3000 提供 Web 界面
+
+## 📦 传统安装方式
+
+如果您偏好本地环境：
 
 ```bash
 # Install dependencies
@@ -17,7 +45,12 @@ pnpm dev init
 
 # Analyze a Python codebase
 pnpm dev analyze ./your-python-project
+
+# Preview documentation in browser
+pnpm dev serve --open
 ```
+
+> **注意**: 本地安装可能遇到 tree-sitter 编译问题，建议使用 Docker 方案。
 
 ## Features
 
@@ -45,6 +78,13 @@ pnpm dev analyze ./your-python-project
 - **Smart Recovery**: Provides partial results even when some analysis steps fail
 - **Detailed Reporting**: Generates comprehensive error reports with retry recommendations
 - **Configurable Behavior**: Choose between continuing on errors (default) or stopping at first failure
+
+### 🌐 **Web Documentation Server** (Phase 5)
+- **Interactive Preview**: Browse generated documentation in your browser
+- **RESTful API**: Programmatic access to documentation data
+- **Real-time Updates**: Instantly view documentation changes
+- **Mobile Responsive**: Works seamlessly on all devices
+- **GitHub Integration**: Mermaid diagrams render natively in GitHub and web interface
 
 ## Installation
 
@@ -100,6 +140,24 @@ pnpm dev analyze ./src --error-report       # Generate detailed error report
 
 # Get help
 pnpm dev analyze --help
+```
+
+### Preview Documentation
+```bash
+# Start web server and open browser
+pnpm dev serve --open
+
+# Custom port and host
+pnpm dev serve --port 3001 --host 0.0.0.0
+
+# Serve specific documentation directory
+pnpm dev serve --docs-dir ./my-custom-docs
+
+# API endpoints available:
+# GET /                    - Home page with documentation overview
+# GET /api/docs           - List all documentation files
+# GET /api/docs/:file     - Get specific file content
+# GET /api/health         - Health check endpoint
 ```
 
 ### Error Handling
@@ -198,7 +256,28 @@ Edit `insight.config.json` to customize:
 
 ## Development
 
-### Commands
+### 🐳 Docker Commands (推荐)
+```bash
+# 开发环境
+pnpm docker:dev              # 启动开发环境
+pnpm docker:dev:bg           # 后台启动开发环境
+pnpm docker:dev:rebuild      # 重建并启动开发环境
+
+# 构建镜像
+pnpm docker:build            # 构建生产镜像
+pnpm docker:build:dev        # 构建开发镜像
+
+# 测试
+pnpm docker:test             # 运行所有测试
+pnpm docker:test --unit      # 运行单元测试
+pnpm docker:test --coverage  # 生成覆盖率报告
+
+# 清理
+pnpm docker:clean            # 清理容器
+pnpm docker:clean --all      # 清理所有 Docker 资源
+```
+
+### 📦 传统 Commands
 ```bash
 pnpm dev              # Run in development mode
 pnpm build            # Build TypeScript
@@ -251,18 +330,19 @@ Alternative direct API support:
 - ✅ Python version detection and feature analysis
 - ✅ Intelligent code quality recommendations
 
-### Phase 5: Error Resilience & Production Polish (In Progress) 🚧
+### Phase 5: Error Resilience & Production Polish (Complete) ✅
 - ✅ **Error Resilience**: Skip & log strategy with comprehensive error handling
 - ✅ **Error Categorization**: Automatic classification of parsing and analysis failures  
 - ✅ **Error Reporting**: Detailed JSON reports with retry recommendations
-- ⏳ **Testing Infrastructure**: Comprehensive test suite with real-world scenarios
-- ⏳ **Performance Optimization**: Memory management for large codebases
-- ⏳ **Documentation Polish**: Enhanced output formatting and cross-references
+- ✅ **Testing Infrastructure**: Comprehensive test suite with real-world scenarios
+- ✅ **Web Documentation Server**: Interactive browser interface with REST API
+- ✅ **Performance Optimization**: Memory management and timeout protection for large codebases
 
-### Phase 6: Production Features (Next)
-- 🌐 Web UI for documentation viewing (`insight serve`)
+### Phase 6: Language Expansion & Enterprise Features (Next)
 - 👁️ Real-time documentation updates via file watching  
 - 🟨 JavaScript/TypeScript language support
+- 🔍 Full-text search in web documentation
+- 📤 Export functionality (PDF, HTML, JSON)
 - 🔧 Integration with popular IDEs (VSCode, IntelliJ)
 - 📦 Support for additional languages (Go, Java, C++)
 - ⚡ Distributed processing for enterprise-scale projects

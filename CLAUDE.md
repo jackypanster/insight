@@ -74,9 +74,13 @@ insight analyze <repo-path>     # Analyze repository and generate docs
   --exclude <patterns>         # Exclude file patterns
   --output <dir>               # Output directory
   --verbose                    # Verbose logging
+insight serve                   # Serve generated docs with web interface
+  --port <n>                   # Port (default: 3000)
+  --host <host>                # Host (default: localhost)
+  --open                       # Open browser automatically
+  --docs-dir <dir>             # Documentation directory
 
-# ⏳ Phase 4 Goals
-insight serve --port 3000       # Serve generated docs
+# ⏳ Future Goals
 insight watch <path>            # Watch mode for continuous updates
 insight export --format pdf    # Export documentation
 ```
@@ -193,12 +197,13 @@ INSIGHT_MAX_WORKERS=4           # Concurrent processing
 
 ## Development Status
 
-**Current Phase**: Phase 4 Complete - Deep Python MVP Optimization ✅
+**Current Phase**: Phase 5 Complete - Production Features & Error Resilience ✅
 **Completed Phases**:
 1. ✅ Phase 1: Foundation (Project structure, CLI framework)
 2. ✅ Phase 2: Core Analysis (AST parsing, OpenRouter integration)
 3. ✅ Phase 3: Full Pipeline (Caching, multi-file support, performance optimization)
 4. ✅ Phase 4: Deep Python MVP Optimization (Enhanced analysis, diagrams, architecture)
+5. ✅ Phase 5: Production Features & Error Resilience (Web server, testing, error handling)
 
 **Phase 4 Major Achievements**:
 - 🧠 Enhanced Python AST Analyzer with advanced features:
@@ -220,7 +225,7 @@ INSIGHT_MAX_WORKERS=4           # Concurrent processing
   - Ready for complex frameworks (calmjs-ready)
   - Plugin architecture foundation for language expansion
 
-**Next Focus**: Phase 5 - Production Features & JavaScript Support
+**Next Focus**: Phase 6 - Language Expansion & Enterprise Features
 
 ## Performance Requirements
 
@@ -254,51 +259,76 @@ INSIGHT_MAX_WORKERS=4           # Concurrent processing
 - 📊 Detailed class diagrams for complex components
 - 🎨 GitHub-native Mermaid rendering support
 
-## Phase 5: Production Features & Language Expansion (Next)
+## Phase 5: Production Features & Error Resilience ✅ COMPLETE
 
-### Week 1-2: Production Polish
-- 👁️ Watch mode with incremental updates
-- 🌐 Web documentation server (`insight serve`)
-- 🔍 Searchable documentation with full-text search
-- 📊 Performance optimization for 10K+ line codebases
+### ✅ Production Polish (Complete)
+- 🌐 Web documentation server (`insight serve`) with REST API
+- 📊 Comprehensive testing infrastructure (unit, integration, edge cases)
+- 🛡️ Advanced error resilience with skip & log strategy
+- 📋 Error categorization and detailed reporting
+- 🎯 Performance optimization for production workloads
+- 🔍 RESTful API endpoints for programmatic access
 
-### Week 3-4: JavaScript Support
+### ✅ Error Handling & Resilience (Complete)  
+- 🛡️ Skip & log strategy for robust analysis
+- 📊 Error categorization (syntax, encoding, timeout, memory, file access)
+- 📋 Detailed error reports with retry recommendations
+- ⚡ Timeout protection (30s per file) and file size limits (10MB)
+- 🎯 Configurable error behavior (continue/stop on error)
+- 📈 Real-time error statistics and progress indicators
+
+### ✅ Testing Infrastructure (Complete)
+- 🧪 Comprehensive test suite with 80%+ coverage
+- 🔧 Unit, integration, and edge case testing
+- 📊 Real-world scenario validation
+- 🎯 CI/CD quality gates and automated testing
+- 🛡️ Error handling and resilience testing
+
+## Phase 6: Language Expansion & Enterprise Features (Next)
+
+### JavaScript/TypeScript Support
 - 🟨 JavaScript AST analyzer using tree-sitter-javascript
+- 🔷 TypeScript AST analyzer with type system support
 - 📦 Node.js framework detection (Express, Next.js, React)
 - 🔧 JavaScript-specific patterns and conventions
-- 📋 Package.json and dependency analysis
-
-### Week 5-6: TypeScript Support
-- 🔷 TypeScript AST analyzer with type system support
 - ⚡ Interface and type definition documentation
 - 🏢 Framework detection (Angular, React, Vue with TS)
-- 📐 Advanced TypeScript patterns (decorators, generics)
+
+### Enterprise Features
+- 👁️ Watch mode with incremental updates
+- 🔍 Full-text search in web documentation
+- 📤 Export functionality (PDF, HTML, JSON)
+- 🌐 Multi-language project support
+- ⚡ Distributed processing for large codebases
 
 ## Current Architecture Status
 
 ### Implemented Components
 ```
 src/
-├── cli/           ✅ Commands (init, analyze) with advanced options
+├── cli/           ✅ Commands (init, analyze, serve) with advanced options
 │   ├── index.ts     ✅ Main CLI entry with comprehensive error handling
-│   └── commands/    ✅ Feature-rich command implementations
+│   └── commands/    ✅ Feature-rich command implementations including web server
 ├── core/
 │   ├── analyzer/    ✅ Enhanced Python AST analysis with advanced features
-│   ├── diagrams/    ✅ NEW: Mermaid diagram generation system
+│   ├── diagrams/    ✅ Mermaid diagram generation system
 │   ├── generator/   ✅ Multi-dimensional documentation with architecture analysis
 │   ├── llm/         ✅ OpenRouter service with intelligent caching
-│   └── scanner/     ✅ File scanning with pattern-based filtering
+│   ├── scanner/     ✅ File scanning with pattern-based filtering
+│   └── server/      ✅ NEW: Web documentation server with REST API
 ├── services/
 │   └── cache/       ✅ SHA-256 content-based caching with TTL
 ├── types/         ✅ Comprehensive TypeScript definitions
 └── utils/         ✅ Config management and structured logging
 ```
 
-### New Phase 4 Features
+### Phase 4-5 Major Features
 - 🆕 **Enhanced AST Analyzer**: Framework detection, pattern recognition, Python version detection
 - 🆕 **Mermaid Generator**: Class diagrams, dependency graphs, architecture visualizations
 - 🆕 **Architecture Analysis**: Component classification, complexity analysis, recommendations
-- 🆕 **Test Infrastructure**: Comprehensive test files with real-world Python scenarios
+- 🆕 **Web Documentation Server**: REST API, browser interface, real-time preview
+- 🆕 **Error Resilience**: Comprehensive error handling, categorization, and reporting
+- 🆕 **Test Infrastructure**: Full test suite with unit, integration, and edge case coverage
 
 ### Performance Metrics (Phase 3 Results)
 | Metric | Target | Achieved |

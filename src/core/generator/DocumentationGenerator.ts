@@ -370,7 +370,7 @@ export class DocumentationGenerator {
     if (hasDecorators) {
       patterns.push('Decorator Pattern');
     }
-    }
+
     if (hasClasses && hasFunctions) {
       patterns.push('Mixed Paradigm');
     }
