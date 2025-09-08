@@ -6,11 +6,11 @@ This document tracks current limitations and known issues with the Insight docum
 
 ### Error Handling
 
-#### Parsing Limitations
-- **Python 2.7 Syntax**: Files using Python 2.7 specific syntax (e.g., `print` statements, old-style exception handling) may not parse correctly with the Python 3 tree-sitter parser
-- **Mixed Python Versions**: Projects containing both Python 2.7 and 3.x files will show parsing errors for Python 2.7 files
+#### Parsing Limitations  
+- **Python 3.6+ Only**: Only supports Python 3.6 and later (Python 2 is not supported)
 - **Invalid Syntax**: Files with syntax errors are skipped and logged rather than attempting partial analysis
 - **Encoding Issues**: Files not encoded in UTF-8 may fail to parse correctly
+- **Complex Syntax**: Very advanced or experimental Python syntax may not parse correctly
 
 #### Performance Constraints
 - **File Size Limits**: 
@@ -81,10 +81,9 @@ This document tracks current limitations and known issues with the Insight docum
 
 ## Workarounds
 
-### For Python 2.7 Projects
-1. **Convert to Python 3**: Use tools like `2to3` to convert syntax
-2. **Analyze Separately**: Run analysis only on Python 3 compatible files
-3. **Use `--continue-on-error`**: Skip problematic files and continue
+### For Unsupported Python Versions
+1. **Upgrade to Python 3.6+**: The recommended approach for all projects
+2. **Use `--continue-on-error`**: Skip problematic files and continue with supported ones
 
 ### For Large Projects
 1. **Use `--max-files`**: Limit analysis to most important files first
@@ -104,10 +103,10 @@ This document tracks current limitations and known issues with the Insight docum
 ## Planned Improvements
 
 ### Version 0.3.2 (Next)
-- [ ] Improved Python 2.7 support via separate parser
 - [ ] Better memory management for large files
 - [ ] Enhanced framework detection algorithms
 - [ ] More granular error categorization
+- [ ] Improved parsing for complex Python 3.10+ syntax
 
 ### Version 0.4.0 (Future)
 - [ ] JavaScript/TypeScript support

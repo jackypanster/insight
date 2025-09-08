@@ -22,10 +22,10 @@ pnpm dev analyze ./your-python-project
 ## Features
 
 ### 🧠 **Enhanced Python Intelligence** (Phase 4)
-- **Advanced Code Analysis**: Tree-sitter AST parsing with deep Python feature support (async/await, type annotations, decorators)
+- **Advanced Code Analysis**: Tree-sitter AST parsing with deep Python 3.6+ feature support (async/await, type annotations, decorators)
 - **Framework Detection**: Automatically detects Django, Flask, FastAPI, Data Science stack and tailors documentation
 - **Design Pattern Recognition**: Identifies 23+ patterns including Singleton, Factory, Observer, Context Manager
-- **Python Version Detection**: Smart detection of Python 2.7 vs 3.x with feature-specific identification
+- **Modern Python Support**: Focused on Python 3.6+ for maximum compatibility with current projects
 
 ### 📊 **Visual Documentation** (Phase 4)
 - **Mermaid Diagram Generation**: Class inheritance, module dependency, and architecture diagrams
@@ -52,6 +52,7 @@ pnpm dev analyze ./your-python-project
 - Node.js 20+
 - pnpm package manager
 - OpenRouter API key
+- **Python 3.6+** projects (Python 2 is not supported)
 
 ### Setup
 ```bash
@@ -118,10 +119,10 @@ pnpm dev analyze ./critical-project --stop-on-error
 
 #### Error Categories
 - **Syntax Errors**: Invalid Python syntax, missing colons, indentation issues
-- **Version Incompatibility**: Python 2.7 code analyzed with Python 3 parser
 - **Encoding Issues**: Non-UTF8 files or character encoding problems
 - **File Access**: Permission denied, file locked, or network file system issues
 - **Resource Limits**: Files too large (>10MB) or parsing timeouts (>30s)
+- **Parsing Errors**: Complex syntax that tree-sitter cannot handle
 
 #### Error Report Format
 Error reports are saved as `insight-errors.json` with detailed information:
@@ -135,14 +136,14 @@ Error reports are saved as `insight-errors.json` with detailed information:
   },
   "errors": [
     {
-      "file": "legacy/old_script.py",
+      "file": "complex/advanced_script.py",
       "error_type": "syntax_error", 
       "message": "invalid syntax at line 45",
       "can_retry": false,
       "context": {
         "file_size": 1024,
         "line_count": 50,
-        "python_version": "2.7"
+        "encoding": "utf-8"
       }
     }
   ]

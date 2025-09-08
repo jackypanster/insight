@@ -17,16 +17,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Timeout protection for AST parsing (30 seconds per file)
 - File size limits (10MB default) with clear error messages
 - Color-coded progress indicators showing success/partial/failed status
-- Error categorization (syntax, encoding, timeout, memory, etc.)
+- Error categorization (syntax, encoding, timeout, memory, file access, parsing)
 - Retry recommendations for different error types
 
 ### Changed
+- **Python Support**: Now exclusively supports Python 3.6+ (removed Python 2 support)
+- Simplified error categorization by removing version compatibility checks
+- Cleaner codebase with reduced complexity around version detection
 - Analyzer now continues on parsing errors instead of stopping
 - Progress output shows success/failure statistics in real-time
 - Analysis results include status field ('success', 'partial', 'failed')
 - AST field in AnalysisResult is now optional for failed analyses
 - Improved error messages with context (file size, line count, encoding)
 - Enhanced console output with error breakdown and recommendations
+
+### Removed
+- Python 2.7 support and related version detection code
+- `version_incompatibility` error category (no longer needed)
+- Python version detection methods and interfaces
+- Complexity around mixed Python version projects
 
 ### Fixed
 - Analyzer no longer crashes on invalid Python syntax
