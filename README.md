@@ -39,6 +39,13 @@ pnpm dev analyze ./your-python-project
 - **Model Flexibility**: Override LLM model via environment variable for cost/quality tradeoffs
 - **Intelligent Recommendations**: Code quality suggestions based on complexity and architecture analysis
 
+### 🛡️ **Error Resilience** (Phase 5)
+- **Skip & Log Strategy**: Continues analysis when files fail to parse, maintaining detailed error logs
+- **Error Categorization**: Automatically categorizes errors (syntax, encoding, timeout, memory, file access)
+- **Smart Recovery**: Provides partial results even when some analysis steps fail
+- **Detailed Reporting**: Generates comprehensive error reports with retry recommendations
+- **Configurable Behavior**: Choose between continuing on errors (default) or stopping at first failure
+
 ## Installation
 
 ### Prerequisites
@@ -85,8 +92,61 @@ pnpm dev analyze ./src --verbose --output ./documentation
 # Limit number of files (useful for testing)
 pnpm dev analyze ./src --max-files 10
 
+# Error handling options
+pnpm dev analyze ./src --continue-on-error  # Continue when files fail (default)
+pnpm dev analyze ./src --stop-on-error      # Stop at first error
+pnpm dev analyze ./src --error-report       # Generate detailed error report
+
 # Get help
 pnpm dev analyze --help
+```
+
+### Error Handling
+
+Insight is designed to be resilient when analyzing real-world codebases that may contain problematic files:
+
+```bash
+# Default behavior - continue on errors with summary
+pnpm dev analyze ./legacy-project
+
+# Generate detailed error report
+pnpm dev analyze ./legacy-project --error-report
+
+# Stop immediately if any file fails to parse  
+pnpm dev analyze ./critical-project --stop-on-error
+```
+
+#### Error Categories
+- **Syntax Errors**: Invalid Python syntax, missing colons, indentation issues
+- **Version Incompatibility**: Python 2.7 code analyzed with Python 3 parser
+- **Encoding Issues**: Non-UTF8 files or character encoding problems
+- **File Access**: Permission denied, file locked, or network file system issues
+- **Resource Limits**: Files too large (>10MB) or parsing timeouts (>30s)
+
+#### Error Report Format
+Error reports are saved as `insight-errors.json` with detailed information:
+```json
+{
+  "summary": {
+    "total_files": 100,
+    "successful": 95,
+    "failed": 5,
+    "success_rate": "95%"
+  },
+  "errors": [
+    {
+      "file": "legacy/old_script.py",
+      "error_type": "syntax_error", 
+      "message": "invalid syntax at line 45",
+      "can_retry": false,
+      "context": {
+        "file_size": 1024,
+        "line_count": 50,
+        "python_version": "2.7"
+      }
+    }
+  ]
+}
 ```
 
 ### Performance
@@ -190,13 +250,21 @@ Alternative direct API support:
 - ✅ Python version detection and feature analysis
 - ✅ Intelligent code quality recommendations
 
-### Phase 5: Production Features (Next)
+### Phase 5: Error Resilience & Production Polish (In Progress) 🚧
+- ✅ **Error Resilience**: Skip & log strategy with comprehensive error handling
+- ✅ **Error Categorization**: Automatic classification of parsing and analysis failures  
+- ✅ **Error Reporting**: Detailed JSON reports with retry recommendations
+- ⏳ **Testing Infrastructure**: Comprehensive test suite with real-world scenarios
+- ⏳ **Performance Optimization**: Memory management for large codebases
+- ⏳ **Documentation Polish**: Enhanced output formatting and cross-references
+
+### Phase 6: Production Features (Next)
 - 🌐 Web UI for documentation viewing (`insight serve`)
-- 👁️ Real-time documentation updates via file watching
+- 👁️ Real-time documentation updates via file watching  
 - 🟨 JavaScript/TypeScript language support
 - 🔧 Integration with popular IDEs (VSCode, IntelliJ)
 - 📦 Support for additional languages (Go, Java, C++)
-- ⚡ Performance optimization for 10K+ line codebases
+- ⚡ Distributed processing for enterprise-scale projects
 
 ## Contributing
 
