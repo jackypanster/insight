@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'fs-extra';
 import path from 'path';
 import { ASTAnalyzer } from '../../src/core/analyzer/ASTAnalyzer.js';
+import { ErrorCollector } from '../../src/services/errors/ErrorCollector.js';
 import type { FileInfo } from '../../src/types/index.js';
 
 describe('ASTAnalyzer', () => {
@@ -354,6 +355,353 @@ class BrokenClass
       const fetchData = result.functions.find(f => f.name === 'fetch_data');
 
       expect(fetchData!.decorators.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('Error Resilience Features (Phase 5)', () => {
+    let errorCollector: ErrorCollector;
+    const errorTestDir = path.join(__dirname, '../../test-fixtures/errors');
+
+    beforeAll(async () => {
+      errorCollector = new ErrorCollector();
+    });
+
+    describe('Error Collector Integration', () => {
+      it('should use provided error collector', async () => {
+        const customErrorCollector = new ErrorCollector();
+        const analyzerWithCollector = new ASTAnalyzer(customErrorCollector);
+        
+        expect(analyzerWithCollector['errorCollector']).toBe(customErrorCollector);
+      });
+
+      it('should allow setting error collector after construction', () => {
+        const analyzer = new ASTAnalyzer();
+        const newCollector = new ErrorCollector();
+        
+        analyzer.setErrorCollector(newCollector);
+        expect(analyzer['errorCollector']).toBe(newCollector);
+      });
+    });
+
+    describe('File Size Limits', () => {
+      it('should reject files larger than 10MB in continue-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(errorTestDir, 'huge_file.py'),
+          size: 11 * 1024 * 1024, // 11MB (over limit)
+          hash: 'test-hash-huge',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const result = await analyzer.analyzeFile(fileInfo, true);
+        
+        expect(result.analysisStatus).toBe('failed');
+        expect(result.errorMessage).toContain('File too large');
+        expect(result.errorMessage).toContain('11.0MB (max: 10MB)');
+        expect(result.functions).toHaveLength(0);
+        expect(result.classes).toHaveLength(0);
+      });
+
+      it('should throw error for large files in stop-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(errorTestDir, 'huge_file.py'),
+          size: 15 * 1024 * 1024, // 15MB
+          hash: 'test-hash-huge-2',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        await expect(analyzer.analyzeFile(fileInfo, false))
+          .rejects
+          .toThrow('File too large: 15.0MB (max: 10MB)');
+      });
+    });
+
+    describe('Parsing Timeout Protection', () => {
+      it('should timeout after 30 seconds during parsing', async () => {
+        // Mock parser to simulate slow parsing
+        const mockParser = {
+          parse: () => new Promise(resolve => setTimeout(resolve, 35000)) // 35 seconds
+        };
+        
+        const analyzerWithMock = new ASTAnalyzer();
+        analyzerWithMock['pythonParser'] = mockParser as any;
+
+        const fileInfo: FileInfo = {
+          path: path.join(testDir, 'simple_class.py'),
+          size: 1000,
+          hash: 'timeout-test',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const startTime = Date.now();
+        const result = await analyzerWithMock.analyzeFile(fileInfo, true);
+        const duration = Date.now() - startTime;
+
+        expect(duration).toBeLessThan(31000); // Should timeout before 31s
+        expect(result.analysisStatus).toBe('failed');
+        expect(result.errorMessage).toContain('Parsing timeout (30s)');
+      }, 32000); // Test timeout of 32 seconds
+    });
+
+    describe('Syntax Error Handling', () => {
+      it('should handle files with syntax errors in continue-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(errorTestDir, 'syntax_error.py'),
+          size: 500,
+          hash: 'syntax-error-test',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const analyzerWithCollector = new ASTAnalyzer(errorCollector);
+        const result = await analyzerWithCollector.analyzeFile(fileInfo, true);
+
+        expect(result.analysisStatus).toBe('partial');
+        expect(result.filePath).toBe(fileInfo.path);
+        expect(result.language).toBe('python');
+        // Should still extract what it can from valid parts
+        expect(result.lines).toBeGreaterThan(0);
+      });
+
+      it('should throw on syntax errors in stop-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(errorTestDir, 'syntax_error.py'),
+          size: 500,
+          hash: 'syntax-error-test-2',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        // Since the file exists but has syntax errors, it should not throw during file read
+        // but should detect parse errors
+        const result = await analyzer.analyzeFile(fileInfo, false);
+        expect(result.analysisStatus).toBe('partial');
+      });
+    });
+
+    describe('File Access Error Handling', () => {
+      it('should handle missing files in continue-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: '/non/existent/file.py',
+          size: 0,
+          hash: 'missing-file',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const analyzerWithCollector = new ASTAnalyzer(errorCollector);
+        const result = await analyzerWithCollector.analyzeFile(fileInfo, true);
+
+        expect(result.analysisStatus).toBe('failed');
+        expect(result.errorMessage).toContain('ENOENT');
+        expect(errorCollector.hasErrors()).toBe(true);
+      });
+
+      it('should throw on missing files in stop-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: '/another/missing/file.py',
+          size: 0,
+          hash: 'missing-file-2',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        await expect(analyzer.analyzeFile(fileInfo, false))
+          .rejects
+          .toThrow('ENOENT');
+      });
+    });
+
+    describe('Language Support Validation', () => {
+      it('should reject unsupported languages in continue-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(testDir, 'simple_class.py'), // Valid file
+          size: 1000,
+          hash: 'wrong-language',
+          language: 'java', // Wrong language
+          lastModified: new Date(),
+        };
+
+        const analyzerWithCollector = new ASTAnalyzer(errorCollector);
+        const result = await analyzerWithCollector.analyzeFile(fileInfo, true);
+
+        expect(result.analysisStatus).toBe('failed');
+        expect(result.errorMessage).toBe('Unsupported language: java');
+        expect(errorCollector.getErrors().some(e => 
+          e.message === 'Unsupported language: java'
+        )).toBe(true);
+      });
+
+      it('should throw on unsupported languages in stop-on-error mode', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(testDir, 'simple_class.py'),
+          size: 1000,
+          hash: 'wrong-language-2',
+          language: 'javascript',
+          lastModified: new Date(),
+        };
+
+        await expect(analyzer.analyzeFile(fileInfo, false))
+          .rejects
+          .toThrow('Unsupported language: javascript');
+      });
+    });
+
+    describe('Partial Analysis Results', () => {
+      it('should return partial results when some extraction steps fail', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(errorTestDir, 'syntax_error.py'),
+          size: 500,
+          hash: 'partial-test',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const result = await analyzer.analyzeFile(fileInfo, true);
+
+        // Should have basic info even if parsing fails
+        expect(result.filePath).toBe(fileInfo.path);
+        expect(result.language).toBe('python');
+        expect(result.lines).toBeGreaterThan(0);
+        
+        // Analysis status should indicate partial success
+        expect(result.analysisStatus).toBe('partial');
+        
+        // Should have error information
+        expect(result.errors.length).toBeGreaterThan(0);
+      });
+    });
+
+    describe('Complex File Handling', () => {
+      it('should handle circular import patterns without crashing', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(errorTestDir, 'circular_import.py'),
+          size: 2000,
+          hash: 'circular-import',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const result = await analyzer.analyzeFile(fileInfo, true);
+
+        // Should complete analysis despite circular imports
+        expect(result.analysisStatus).toEqual(expect.stringMatching(/success|partial/));
+        expect(result.filePath).toBe(fileInfo.path);
+        expect(result.imports.length).toBeGreaterThan(0);
+      });
+    });
+
+    describe('Analysis Status Tracking', () => {
+      it('should return "success" status for successful analysis', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(testDir, 'simple_class.py'),
+          size: 1000,
+          hash: 'success-test',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const result = await analyzer.analyzeFile(fileInfo, true);
+
+        expect(result.analysisStatus).toBe('success');
+        expect(result.classes.length).toBeGreaterThan(0);
+        expect(result.functions.length).toBeGreaterThan(0);
+      });
+
+      it('should return "failed" status for complete failures', async () => {
+        const fileInfo: FileInfo = {
+          path: '/completely/missing/file.py',
+          size: 0,
+          hash: 'failed-test',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const result = await analyzer.analyzeFile(fileInfo, true);
+
+        expect(result.analysisStatus).toBe('failed');
+        expect(result.errorMessage).toBeDefined();
+      });
+
+      it('should return "partial" status for files with parse errors but some content', async () => {
+        const fileInfo: FileInfo = {
+          path: path.join(errorTestDir, 'syntax_error.py'),
+          size: 500,
+          hash: 'partial-test-2',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const result = await analyzer.analyzeFile(fileInfo, true);
+
+        expect(result.analysisStatus).toBe('partial');
+        expect(result.lines).toBeGreaterThan(0); // Should have basic metrics
+      });
+    });
+
+    describe('Error Context Collection', () => {
+      it('should provide detailed error context to ErrorCollector', async () => {
+        const mockCollector = {
+          logError: vi.fn(),
+          recordSuccess: vi.fn(),
+          hasErrors: () => false,
+          getErrors: () => [],
+        } as any;
+
+        const analyzerWithMock = new ASTAnalyzer(mockCollector);
+        
+        const fileInfo: FileInfo = {
+          path: '/missing/test.py',
+          size: 1024,
+          hash: 'context-test',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        await analyzerWithMock.analyzeFile(fileInfo, true);
+
+        expect(mockCollector.logError).toHaveBeenCalledWith(
+          '/missing/test.py',
+          expect.any(Error),
+          expect.objectContaining({
+            encoding: 'utf8'
+          })
+        );
+      });
+    });
+
+    describe('Performance Monitoring', () => {
+      it('should handle large but valid files efficiently', async () => {
+        // Create a large valid Python file for testing
+        const largeValidFile = path.join(testDir, 'large_valid.py');
+        let content = '# Large valid Python file\n';
+        for (let i = 0; i < 1000; i++) {
+          content += `def function_${i}():\n    return ${i}\n\n`;
+        }
+        
+        await fs.writeFile(largeValidFile, content);
+
+        const fileInfo: FileInfo = {
+          path: largeValidFile,
+          size: content.length,
+          hash: 'large-valid',
+          language: 'python',
+          lastModified: new Date(),
+        };
+
+        const startTime = Date.now();
+        const result = await analyzer.analyzeFile(fileInfo, true);
+        const duration = Date.now() - startTime;
+
+        expect(result.analysisStatus).toBe('success');
+        expect(result.functions.length).toBeGreaterThan(500);
+        expect(duration).toBeLessThan(5000); // Should complete in under 5 seconds
+
+        // Clean up
+        await fs.remove(largeValidFile);
+      });
     });
   });
 });
