@@ -24,6 +24,9 @@ export interface Parameter {
   type?: string;
   defaultValue?: string;
   annotation?: string;
+  isOptional?: boolean;
+  isVariadic?: boolean; // *args
+  isKeyword?: boolean;  // **kwargs
 }
 
 export interface FunctionNode extends ASTNode {
@@ -33,15 +36,23 @@ export interface FunctionNode extends ASTNode {
   docstring?: string;
   decorators: string[];
   isAsync: boolean;
+  isGenerator?: boolean;
+  isProperty?: boolean;
+  isStaticMethod?: boolean;
+  isClassMethod?: boolean;
+  complexity: number;
 }
 
 export interface ClassNode extends ASTNode {
   name: string;
   baseClasses: string[];
   methods: FunctionNode[];
-  attributes: string[];
+  attributes: AttributeNode[];
   docstring?: string;
   decorators: string[];
+  isDataClass?: boolean;
+  isAbstract?: boolean;
+  patterns: string[]; // Design patterns detected
 }
 
 export interface ImportNode extends ASTNode {
@@ -49,6 +60,23 @@ export interface ImportNode extends ASTNode {
   items: string[];
   alias?: string;
   isFrom: boolean;
+  level?: number; // relative import level
+}
+
+export interface AttributeNode {
+  name: string;
+  type?: string;
+  annotation?: string;
+  defaultValue?: string;
+  isClassVar?: boolean;
+  isPrivate?: boolean;
+}
+
+export interface FrameworkInfo {
+  type: 'django' | 'flask' | 'fastapi' | 'generic' | 'unknown';
+  version?: string;
+  patterns: string[];
+  dependencies: string[];
 }
 
 export interface AnalysisResult {
@@ -62,6 +90,10 @@ export interface AnalysisResult {
   complexity: number;
   lines: number;
   errors: string[];
+  framework?: FrameworkInfo;
+  patterns: string[]; // Design patterns detected
+  typeAnnotations: boolean; // Uses type annotations
+  pythonVersion?: string; // Detected Python version
 }
 
 export class ASTAnalyzer {
@@ -100,6 +132,12 @@ export class ASTAnalyzer {
       const globalVariables = this.extractGlobalVariables(rootNode, content);
       const complexity = this.calculateComplexity(rootNode);
 
+      // Enhanced analysis for Python
+      const framework = this.detectFramework(imports, content);
+      const patterns = this.detectDesignPatterns(classes, functions);
+      const typeAnnotations = this.hasTypeAnnotations(functions, classes);
+      const pythonVersion = this.detectPythonVersion(content, rootNode);
+
       const result: AnalysisResult = {
         filePath: fileInfo.path,
         language: fileInfo.language,
@@ -111,6 +149,10 @@ export class ASTAnalyzer {
         complexity,
         lines,
         errors: rootNode.hasError() ? ['Parse errors detected'] : [],
+        framework,
+        patterns,
+        typeAnnotations,
+        pythonVersion,
       };
 
       const duration = Date.now() - startTime;
@@ -214,6 +256,13 @@ export class ASTAnalyzer {
     const docstring = this.extractDocstring(node, sourceCode);
     const decorators = this.extractDecorators(node, sourceCode);
     const returnType = this.extractReturnType(node, sourceCode);
+    
+    // Enhanced function analysis
+    const isGenerator = this.isGeneratorFunction(node, sourceCode);
+    const isProperty = decorators.some(dec => dec.includes('property'));
+    const isStaticMethod = decorators.some(dec => dec.includes('staticmethod'));
+    const isClassMethod = decorators.some(dec => dec.includes('classmethod'));
+    const complexity = this.calculateComplexity(node);
 
     return {
       type: 'function',
@@ -227,6 +276,11 @@ export class ASTAnalyzer {
       docstring,
       decorators,
       isAsync,
+      isGenerator,
+      isProperty,
+      isStaticMethod,
+      isClassMethod,
+      complexity,
     };
   }
 
@@ -276,9 +330,15 @@ export class ASTAnalyzer {
     const name = nameNode.text;
     const baseClasses = this.extractBaseClasses(node, sourceCode);
     const methods = this.extractMethods(node, sourceCode);
-    const attributes = this.extractClassAttributes(node, sourceCode);
+    const attributes = this.extractClassAttributesEnhanced(node, sourceCode);
     const docstring = this.extractDocstring(node, sourceCode);
     const decorators = this.extractDecorators(node, sourceCode);
+    
+    // Enhanced class analysis
+    const isDataClass = decorators.some(dec => dec.includes('dataclass'));
+    const isAbstract = baseClasses.some(base => base.includes('ABC')) || 
+                     decorators.some(dec => dec.includes('abstractmethod'));
+    const patterns = this.detectClassPatterns(name, methods, decorators);
 
     return {
       type: 'class',
@@ -292,6 +352,9 @@ export class ASTAnalyzer {
       attributes,
       docstring,
       decorators,
+      isDataClass,
+      isAbstract,
+      patterns,
     };
   }
 
@@ -517,6 +580,239 @@ export class ASTAnalyzer {
 
     traverse(node);
     return complexity;
+  }
+
+  // Enhanced method implementations
+  
+  private isGeneratorFunction(node: Parser.SyntaxNode, sourceCode: string): boolean {
+    const bodyText = sourceCode.slice(node.startIndex, node.endIndex);
+    return bodyText.includes('yield ');
+  }
+  
+  private extractClassAttributesEnhanced(node: Parser.SyntaxNode, sourceCode: string): AttributeNode[] {
+    const attributes: AttributeNode[] = [];
+    
+    const traverse = (node: Parser.SyntaxNode, depth: number = 0) => {
+      // Only look at direct class body assignments
+      if (depth === 1 && (node.type === 'assignment' || node.type === 'annotated_assignment')) {
+        const identifiers = this.findChildrenByType(node, 'identifier');
+        if (identifiers.length > 0) {
+          const name = identifiers[0].text;
+          const isPrivate = name.startsWith('_');
+          const isClassVar = node.type === 'annotated_assignment';
+          
+          // Try to extract type annotation
+          let annotation: string | undefined;
+          const typeNode = this.findChildByType(node, 'type');
+          if (typeNode) {
+            annotation = typeNode.text;
+          }
+          
+          // Try to extract default value
+          let defaultValue: string | undefined;
+          const assignmentNodes = node.children.filter(child => 
+            child.type !== 'identifier' && child.type !== ':' && child.type !== 'type'
+          );
+          if (assignmentNodes.length > 0) {
+            defaultValue = assignmentNodes[assignmentNodes.length - 1].text;
+          }
+          
+          attributes.push({
+            name,
+            annotation,
+            defaultValue,
+            isClassVar,
+            isPrivate,
+          });
+        }
+      }
+
+      // Don't go into method bodies
+      if (node.type !== 'function_definition' && 
+          node.type !== 'async_function_definition' && depth < 2) {
+        for (const child of node.children) {
+          traverse(child, depth + 1);
+        }
+      }
+    };
+
+    traverse(node);
+    return attributes;
+  }
+  
+  private detectClassPatterns(name: string, methods: FunctionNode[], decorators: string[]): string[] {
+    const patterns: string[] = [];
+    
+    // Singleton pattern
+    if (methods.some(method => method.name === '__new__' || method.name === 'getInstance')) {
+      patterns.push('Singleton');
+    }
+    
+    // Factory pattern
+    if (name.toLowerCase().includes('factory') || 
+        methods.some(method => method.name.startsWith('create'))) {
+      patterns.push('Factory');
+    }
+    
+    // Builder pattern
+    if (methods.some(method => method.name === 'build' || method.name.startsWith('with'))) {
+      patterns.push('Builder');
+    }
+    
+    // Context Manager
+    if (methods.some(method => method.name === '__enter__' || method.name === '__exit__')) {
+      patterns.push('Context Manager');
+    }
+    
+    // Iterator
+    if (methods.some(method => method.name === '__iter__' || method.name === '__next__')) {
+      patterns.push('Iterator');
+    }
+    
+    return patterns;
+  }
+
+  // Enhanced Python Analysis Methods
+  
+  private detectFramework(imports: ImportNode[], content: string): FrameworkInfo {
+    const importModules = imports.map(imp => imp.module.toLowerCase());
+    const allImports = imports.flatMap(imp => imp.items.map(item => item.toLowerCase()));
+    
+    // Django detection
+    if (importModules.some(mod => mod.includes('django')) || 
+        allImports.some(item => ['models', 'views', 'urls', 'forms'].includes(item))) {
+      return {
+        type: 'django',
+        patterns: ['MVC', 'ORM', 'URL Routing'],
+        dependencies: imports.filter(imp => imp.module.includes('django')).map(imp => imp.module)
+      };
+    }
+    
+    // FastAPI detection
+    if (importModules.some(mod => mod.includes('fastapi')) ||
+        allImports.some(item => ['fastapi', 'pydantic'].includes(item))) {
+      return {
+        type: 'fastapi',
+        patterns: ['REST API', 'Dependency Injection', 'Type Validation'],
+        dependencies: imports.filter(imp => imp.module.includes('fastapi') || imp.module.includes('pydantic')).map(imp => imp.module)
+      };
+    }
+    
+    // Flask detection
+    if (importModules.some(mod => mod.includes('flask')) ||
+        allImports.some(item => ['flask', 'render_template', 'request'].includes(item))) {
+      return {
+        type: 'flask',
+        patterns: ['Microframework', 'Decorators', 'Blueprints'],
+        dependencies: imports.filter(imp => imp.module.includes('flask')).map(imp => imp.module)
+      };
+    }
+    
+    // Generic framework detection
+    if (importModules.some(mod => ['requests', 'sqlalchemy', 'celery'].includes(mod))) {
+      return {
+        type: 'generic',
+        patterns: ['Web Services', 'Database ORM', 'Task Queue'],
+        dependencies: importModules.filter(mod => ['requests', 'sqlalchemy', 'celery'].includes(mod))
+      };
+    }
+    
+    return { type: 'unknown', patterns: [], dependencies: [] };
+  }
+  
+  private detectDesignPatterns(classes: ClassNode[], functions: FunctionNode[]): string[] {
+    const patterns: string[] = [];
+    
+    for (const cls of classes) {
+      // Singleton pattern
+      if (cls.methods.some(method => method.name === '__new__' || method.name === 'getInstance')) {
+        patterns.push('Singleton');
+      }
+      
+      // Factory pattern
+      if (cls.name.toLowerCase().includes('factory') || 
+          cls.methods.some(method => method.name.startsWith('create'))) {
+        patterns.push('Factory');
+      }
+      
+      // Observer pattern
+      if (cls.methods.some(method => ['notify', 'update', 'subscribe', 'unsubscribe'].includes(method.name))) {
+        patterns.push('Observer');
+      }
+      
+      // Decorator pattern
+      if (cls.decorators.length > 0 || cls.methods.some(method => method.decorators.length > 0)) {
+        patterns.push('Decorator');
+      }
+      
+      // Builder pattern
+      if (cls.methods.some(method => method.name === 'build' || method.name.startsWith('with'))) {
+        patterns.push('Builder');
+      }
+      
+      // Abstract Factory
+      if (cls.isAbstract || cls.name.toLowerCase().includes('abstract')) {
+        patterns.push('Abstract Factory');
+      }
+    }
+    
+    // Strategy pattern (functions with similar signatures)
+    const functionGroups = new Map<string, FunctionNode[]>();
+    functions.forEach(func => {
+      const signature = `${func.parameters.length}_${func.returnType || 'void'}`;
+      if (!functionGroups.has(signature)) {
+        functionGroups.set(signature, []);
+      }
+      functionGroups.get(signature)!.push(func);
+    });
+    
+    for (const [_, group] of functionGroups) {
+      if (group.length >= 3) {
+        patterns.push('Strategy');
+        break;
+      }
+    }
+    
+    return [...new Set(patterns)];
+  }
+  
+  private hasTypeAnnotations(functions: FunctionNode[], classes: ClassNode[]): boolean {
+    const hasTypedFunctions = functions.some(func => 
+      func.returnType || func.parameters.some(param => param.annotation)
+    );
+    
+    const hasTypedAttributes = classes.some(cls => 
+      cls.attributes.some(attr => attr.annotation)
+    );
+    
+    return hasTypedFunctions || hasTypedAttributes;
+  }
+  
+  private detectPythonVersion(content: string, rootNode: Parser.SyntaxNode): string {
+    // Check for Python 3+ syntax
+    if (content.includes('async def') || content.includes('await ')) {
+      return '3.5+';
+    }
+    
+    if (content.includes('f"') || content.includes("f'")) {
+      return '3.6+';
+    }
+    
+    if (content.includes(':=')) { // Walrus operator
+      return '3.8+';
+    }
+    
+    if (content.includes('match ') && content.includes('case ')) {
+      return '3.10+';
+    }
+    
+    // Check for print statement vs function
+    const hasPrintStatement = this.findDeepChildByType(rootNode, 'print_statement');
+    if (hasPrintStatement) {
+      return '2.7';
+    }
+    
+    return '3.x';
   }
 
   // Get analysis statistics

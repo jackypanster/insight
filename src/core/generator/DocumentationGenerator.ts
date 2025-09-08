@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import Handlebars from 'handlebars';
 import { logger } from '@/utils/logger.js';
+import { MermaidGenerator, type MermaidDiagram } from '../diagrams/MermaidGenerator.js';
 import type { InsightConfig } from '@/types/index.js';
 import type { ScanResult } from '../scanner/FileScanner.js';
 import type { AnalysisResult } from '../analyzer/ASTAnalyzer.js';
@@ -12,6 +13,7 @@ export interface ProjectDocumentation {
   architecture: string;
   files: FileDocumentation[];
   statistics: ProjectStatistics;
+  diagrams: MermaidDiagram[];
   generatedAt: Date;
 }
 
@@ -106,13 +108,25 @@ export class DocumentationGenerator {
       const fileDocumentations = this.generateFileDocumentations(analyses, llmAnalyses);
       const statistics = this.generateStatistics(scanResult, analyses);
       const overview = this.generateOverview(statistics, fileDocumentations);
-      const architecture = this.generateArchitecture(fileDocumentations, statistics);
+      
+      // Generate Mermaid diagrams
+      const mermaidGenerator = new MermaidGenerator({
+        includePrivateMethods: false,
+        includeImports: true,
+        maxNodesPerDiagram: 15,
+        theme: 'default'
+      });
+      const diagrams = mermaidGenerator.generateAllDiagrams(analyses, fileDocumentations);
+      
+      // Enhanced architecture with diagrams
+      const architecture = this.generateArchitectureWithDiagrams(fileDocumentations, statistics, diagrams);
 
       const documentation: ProjectDocumentation = {
         overview,
         architecture,
         files: fileDocumentations,
         statistics,
+        diagrams,
         generatedAt: new Date(),
       };
 
@@ -283,6 +297,17 @@ export class DocumentationGenerator {
     });
   }
 
+  private generateArchitectureWithDiagrams(
+    files: FileDocumentation[], 
+    statistics: ProjectStatistics, 
+    diagrams: MermaidDiagram[]
+  ): string {
+    const baseArchitecture = this.generateArchitecture(files, statistics);
+    const diagramsMarkdown = MermaidGenerator.diagramsToMarkdown(diagrams);
+    
+    return baseArchitecture + '\n\n' + diagramsMarkdown;
+  }
+
   private generateArchitecture(files: FileDocumentation[], statistics: ProjectStatistics): string {
     const template = this.templates['architecture'];
     if (!template) {
@@ -323,10 +348,15 @@ export class DocumentationGenerator {
   private identifyArchitecturalPatterns(files: FileDocumentation[]): string[] {
     const patterns: string[] = [];
 
-    // Simple pattern detection
+    // Enhanced pattern detection
     const hasClasses = files.some(f => f.classes.length > 0);
     const hasFunctions = files.some(f => f.functions.length > 0);
     const hasInheritance = files.some(f => f.classes.some(c => c.inheritance.length > 0));
+    const hasAsyncFunctions = files.some(f => f.functions.some(func => func.isAsync));
+    const hasDecorators = files.some(f => 
+      f.classes.some(c => c.name.includes('@')) || 
+      f.functions.some(func => func.name.includes('@'))
+    );
 
     if (hasClasses && hasInheritance) {
       patterns.push('Object-Oriented Programming');
@@ -334,11 +364,33 @@ export class DocumentationGenerator {
     if (hasFunctions && !hasClasses) {
       patterns.push('Functional Programming');
     }
+    if (hasAsyncFunctions) {
+      patterns.push('Asynchronous Programming');
+    }
+    if (hasDecorators) {
+      patterns.push('Decorator Pattern');
+    }
+    }
     if (hasClasses && hasFunctions) {
       patterns.push('Mixed Paradigm');
     }
 
-    return patterns;
+    // Check for specific Python patterns
+    const hasContextManagers = files.some(f => 
+      f.functions.some(func => func.name.includes('__enter__') || func.name.includes('__exit__'))
+    );
+    if (hasContextManagers) {
+      patterns.push('Context Manager Pattern');
+    }
+    
+    const hasGenerators = files.some(f => 
+      f.functions.some(func => func.description?.includes('yield') || func.name.includes('generator'))
+    );
+    if (hasGenerators) {
+      patterns.push('Generator Pattern');
+    }
+
+    return patterns.length > 0 ? patterns : ['Standard Python Structure'];
   }
 
   private generateFallbackOverview(statistics: ProjectStatistics): string {
@@ -362,19 +414,62 @@ Generated at: ${new Date().toISOString()}
   }
 
   private generateFallbackArchitecture(files: FileDocumentation[], statistics: ProjectStatistics): string {
-    return `# Architecture
+    // Enhanced architecture analysis
+    const structure = this.analyzeProjectStructure(files);
+    const patterns = this.identifyArchitecturalPatterns(files);
+    const frameworks = this.detectFrameworks(files);
+    const dependencies = this.analyzeDependencies(files);
+    
+    return `# 🏗️ Architecture Overview
 
-## Project Structure
-${files.map(f => `- ${f.filePath} (${f.classes.length} classes, ${f.functions.length} functions)`).join('\n')}
+## 📁 Project Structure
 
-## Complexity Distribution
-- Low (≤5): ${statistics.complexityDistribution.low} files
-- Medium (6-10): ${statistics.complexityDistribution.medium} files
-- High (>10): ${statistics.complexityDistribution.high} files
+${Object.entries(structure).map(([dir, info]: [string, any]) => {
+      return `### ${dir || 'Root'}
+- **Files**: ${info.files.length}
+- **Classes**: ${info.classes}
+- **Functions**: ${info.functions}
+- **Complexity**: ${Math.round(info.files.reduce((sum: number, f: any) => sum + f.complexity, 0) / info.files.length) || 0}`;
+    }).join('\n\n')}
 
-## Patterns
-- Object-Oriented Programming (based on class usage)
-- Modular Design (based on file structure)
+## 🧩 Component Analysis
+
+${files.map(f => {
+      const fileName = path.basename(f.filePath);
+      const fileType = this.classifyFileType(f);
+      return `### ${fileName} (${fileType})
+- **Language**: ${f.language}
+- **Classes**: ${f.classes.length} ${f.classes.length > 0 ? '(' + f.classes.map(c => c.name).join(', ') + ')' : ''}
+- **Functions**: ${f.functions.length}
+- **Complexity**: ${f.complexity}
+- **Imports**: ${f.imports.length}`;
+    }).join('\n\n')}
+
+## 🎯 Design Patterns & Frameworks
+
+${frameworks.length > 0 ? `### Detected Frameworks
+${frameworks.map(fw => `- **${fw.type}**: ${fw.description}`).join('\n')}
+
+` : ''}### Architecture Patterns
+${patterns.length > 0 ? patterns.map(p => `- ${p}`).join('\n') : '- Standard Python structure'}
+
+## 📊 Complexity Distribution
+
+- **Low Complexity (≤5)**: ${statistics.complexityDistribution.low} files
+- **Medium Complexity (6-10)**: ${statistics.complexityDistribution.medium} files
+- **High Complexity (>10)**: ${statistics.complexityDistribution.high} files
+
+## 🔗 Dependency Analysis
+
+${dependencies.external.length > 0 ? `### External Dependencies
+${dependencies.external.map(dep => `- ${dep}`).join('\n')}
+
+` : ''}${dependencies.internal.length > 0 ? `### Internal Dependencies
+${dependencies.internal.map(dep => `- ${dep}`).join('\n')}
+
+` : ''}## 🚀 Recommendations
+
+${this.generateArchitectureRecommendations(files, statistics).map(rec => `- ${rec}`).join('\n')}
 `;
   }
 
@@ -512,6 +607,125 @@ ${fileDoc.recommendations.map(rec => `- ${rec}`).join('\n')}
     } catch (error) {
       logger.error('Failed to load templates:', error);
     }
+  }
+
+  // Helper methods for enhanced architecture generation
+  
+  private classifyFileType(file: FileDocumentation): string {
+    const fileName = path.basename(file.filePath).toLowerCase();
+    
+    if (fileName.includes('test') || fileName.includes('spec')) {
+      return 'Test';
+    }
+    if (fileName.includes('config') || fileName.includes('settings')) {
+      return 'Configuration';
+    }
+    if (fileName === '__init__.py') {
+      return 'Package Init';
+    }
+    if (fileName.includes('main') || fileName.includes('app')) {
+      return 'Application Entry';
+    }
+    if (file.classes.length > 0 && file.functions.length === 0) {
+      return 'Class Module';
+    }
+    if (file.functions.length > 0 && file.classes.length === 0) {
+      return 'Function Module';
+    }
+    if (file.classes.length > 0 && file.functions.length > 0) {
+      return 'Mixed Module';
+    }
+    return 'Utility';
+  }
+  
+  private detectFrameworks(files: FileDocumentation[]): { type: string; description: string }[] {
+    const frameworks: { type: string; description: string }[] = [];
+    const allImports = files.flatMap(f => f.imports.map(imp => imp.name?.toLowerCase() || ''));
+    
+    if (allImports.some(imp => imp.includes('django'))) {
+      frameworks.push({ type: 'Django', description: 'Web framework for Python' });
+    }
+    if (allImports.some(imp => imp.includes('flask'))) {
+      frameworks.push({ type: 'Flask', description: 'Lightweight web framework' });
+    }
+    if (allImports.some(imp => imp.includes('fastapi'))) {
+      frameworks.push({ type: 'FastAPI', description: 'Modern, fast web framework for APIs' });
+    }
+    if (allImports.some(imp => imp.includes('pandas') || imp.includes('numpy'))) {
+      frameworks.push({ type: 'Data Science', description: 'NumPy/Pandas data processing stack' });
+    }
+    if (allImports.some(imp => imp.includes('pytest') || imp.includes('unittest'))) {
+      frameworks.push({ type: 'Testing', description: 'Test framework detected' });
+    }
+    
+    return frameworks;
+  }
+  
+  private analyzeDependencies(files: FileDocumentation[]): { external: string[]; internal: string[] } {
+    const external: string[] = [];
+    const internal: string[] = [];
+    const standardLibs = new Set(['os', 'sys', 'json', 'time', 'datetime', 'pathlib', 'collections', 're']);
+    
+    const allImports = files.flatMap(f => f.imports);
+    
+    for (const imp of allImports) {
+      const moduleName = imp.name || '';
+      const baseName = moduleName.split('.')[0];
+      
+      if (standardLibs.has(baseName)) {
+        continue; // Skip standard library
+      }
+      
+      if (moduleName.startsWith('.') || files.some(f => f.filePath.includes(baseName))) {
+        if (!internal.includes(moduleName)) {
+          internal.push(moduleName);
+        }
+      } else {
+        if (!external.includes(baseName)) {
+          external.push(baseName);
+        }
+      }
+    }
+    
+    return { external: external.sort(), internal: internal.sort() };
+  }
+  
+  private generateArchitectureRecommendations(
+    files: FileDocumentation[], 
+    statistics: ProjectStatistics
+  ): string[] {
+    const recommendations: string[] = [];
+    
+    const highComplexityFiles = files.filter(f => f.complexity > 10);
+    if (highComplexityFiles.length > 0) {
+      recommendations.push(
+        `Consider refactoring ${highComplexityFiles.length} high-complexity files: ${highComplexityFiles.map(f => path.basename(f.filePath)).join(', ')}`
+      );
+    }
+    
+    const largeClasses = files.flatMap(f => f.classes.filter(c => c.methods.length > 10));
+    if (largeClasses.length > 0) {
+      recommendations.push(
+        `Large classes detected (>10 methods). Consider splitting: ${largeClasses.map(c => c.name).join(', ')}`
+      );
+    }
+    
+    const hasNoDocstrings = files.some(f => 
+      f.classes.some(c => !c.description) || f.functions.some(func => !func.description)
+    );
+    if (hasNoDocstrings) {
+      recommendations.push('Add docstrings to classes and functions for better documentation');
+    }
+    
+    if (statistics.totalFiles > 20 && !files.some(f => f.filePath.includes('__init__.py'))) {
+      recommendations.push('Consider organizing code into packages with __init__.py files');
+    }
+    
+    if (recommendations.length === 0) {
+      recommendations.push('Code structure looks good! Consider adding more comprehensive tests.');
+    }
+    
+    return recommendations;
   }
 
   // Get generation statistics
