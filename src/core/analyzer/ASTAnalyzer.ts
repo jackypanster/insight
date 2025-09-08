@@ -4,6 +4,7 @@ import Python from 'tree-sitter-python';
 import fs from 'fs-extra';
 import path from 'path';
 import { logger } from '@/utils/logger.js';
+import { ErrorCollector, type ErrorContext } from '@/services/errors/ErrorCollector.js';
 import type { FileInfo } from '@/types/index.js';
 
 export interface ASTNode {
@@ -82,7 +83,7 @@ export interface FrameworkInfo {
 export interface AnalysisResult {
   filePath: string;
   language: string;
-  ast: ASTNode;
+  ast?: ASTNode; // Optional now - may be missing if parsing failed
   functions: FunctionNode[];
   classes: ClassNode[];
   imports: ImportNode[];
@@ -93,50 +94,205 @@ export interface AnalysisResult {
   framework?: FrameworkInfo;
   patterns: string[]; // Design patterns detected
   typeAnnotations: boolean; // Uses type annotations
-  pythonVersion?: string; // Detected Python version
+  analysisStatus: 'success' | 'partial' | 'failed';
+  errorMessage?: string;
 }
 
 export class ASTAnalyzer {
   private parser: Parser;
   private pythonParser: Parser;
+  private errorCollector: ErrorCollector;
 
-  constructor() {
+  constructor(errorCollector?: ErrorCollector) {
     this.parser = new Parser();
     this.pythonParser = new Parser();
     this.pythonParser.setLanguage(Python);
+    this.errorCollector = errorCollector || new ErrorCollector();
   }
 
-  async analyzeFile(fileInfo: FileInfo): Promise<AnalysisResult> {
+  /**
+   * Set error collector for this analyzer instance
+   */
+  setErrorCollector(errorCollector: ErrorCollector): void {
+    this.errorCollector = errorCollector;
+  }
+
+  async analyzeFile(fileInfo: FileInfo, continueOnError: boolean = true): Promise<AnalysisResult> {
     const startTime = Date.now();
-    logger.info(`Analyzing file: ${fileInfo.path}`);
+    logger.debug(`Analyzing file: ${fileInfo.path}`);
+
+    // Initialize basic result structure
+    const basicResult: AnalysisResult = {
+      filePath: fileInfo.path,
+      language: fileInfo.language,
+      functions: [],
+      classes: [],
+      imports: [],
+      globalVariables: [],
+      complexity: 0,
+      lines: 0,
+      errors: [],
+      patterns: [],
+      typeAnnotations: false,
+      analysisStatus: 'failed'
+    };
 
     try {
-      const content = await fs.readFile(fileInfo.path, 'utf8');
-      const lines = content.split('\n').length;
-
-      if (fileInfo.language !== 'python') {
-        throw new Error(`Unsupported language: ${fileInfo.language}`);
+      // Step 1: Read file with encoding detection
+      let content: string;
+      let fileStats: fs.Stats;
+      
+      try {
+        fileStats = await fs.stat(fileInfo.path);
+        
+        // Check file size (max 10MB)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (fileStats.size > maxSize) {
+          throw new Error(`File too large: ${(fileStats.size / 1024 / 1024).toFixed(1)}MB (max: 10MB)`);
+        }
+        
+        content = await fs.readFile(fileInfo.path, 'utf8');
+      } catch (readError) {
+        const error = readError as Error;
+        const context: ErrorContext = {
+          fileSize: fileStats?.size,
+          encoding: 'utf8'
+        };
+        
+        if (continueOnError) {
+          this.errorCollector.logError(fileInfo.path, error, context);
+          return { ...basicResult, errorMessage: error.message };
+        }
+        throw error;
       }
 
-      const tree = this.pythonParser.parse(content);
-      const rootNode = tree.rootNode;
+      const lines = content.split('\n').length;
+      basicResult.lines = lines;
+
+      // Step 2: Language validation
+      if (fileInfo.language !== 'python') {
+        const error = new Error(`Unsupported language: ${fileInfo.language}`);
+        if (continueOnError) {
+          this.errorCollector.logError(fileInfo.path, error);
+          return { ...basicResult, errorMessage: error.message };
+        }
+        throw error;
+      }
+
+      // Step 3: Parse AST with timeout
+      let tree: Parser.Tree;
+      let rootNode: Parser.SyntaxNode;
+      
+      try {
+        const parsePromise = new Promise<Parser.Tree>((resolve) => {
+          const result = this.pythonParser.parse(content);
+          resolve(result);
+        });
+        
+        const timeoutPromise = new Promise<Parser.Tree>((_, reject) => {
+          setTimeout(() => reject(new Error('Parsing timeout (30s)')), 30000);
+        });
+        
+        tree = await Promise.race([parsePromise, timeoutPromise]);
+        rootNode = tree.rootNode;
+        
+      } catch (parseError) {
+        const error = parseError as Error;
+        const context: ErrorContext = {
+          fileSize: fileStats.size,
+          lineCount: lines,
+          encoding: 'utf8'
+        };
+        
+        if (continueOnError) {
+          this.errorCollector.logError(fileInfo.path, error, context);
+          return { ...basicResult, errorMessage: error.message };
+        }
+        throw error;
+      }
+
+      // Step 4: Extract information with error handling for each step
+      let ast: ASTNode | undefined;
+      let functions: FunctionNode[] = [];
+      let classes: ClassNode[] = [];
+      let imports: ImportNode[] = [];
+      let globalVariables: string[] = [];
+      let complexity = 0;
+      let hasParseErrors = false;
 
       if (rootNode.hasError()) {
-        logger.warn(`Parse errors in file: ${fileInfo.path}`);
+        hasParseErrors = true;
+        logger.debug(`Parse errors detected in file: ${fileInfo.path}`);
       }
 
-      const ast = this.convertToASTNode(rootNode, content);
-      const functions = this.extractFunctions(rootNode, content);
-      const classes = this.extractClasses(rootNode, content);
-      const imports = this.extractImports(rootNode, content);
-      const globalVariables = this.extractGlobalVariables(rootNode, content);
-      const complexity = this.calculateComplexity(rootNode);
+      try {
+        ast = this.convertToASTNode(rootNode, content);
+      } catch (error) {
+        logger.debug(`Failed to convert AST for ${fileInfo.path}: ${error}`);
+      }
 
-      // Enhanced analysis for Python
-      const framework = this.detectFramework(imports, content);
-      const patterns = this.detectDesignPatterns(classes, functions);
-      const typeAnnotations = this.hasTypeAnnotations(functions, classes);
-      const pythonVersion = this.detectPythonVersion(content, rootNode);
+      try {
+        functions = this.extractFunctions(rootNode, content);
+      } catch (error) {
+        logger.debug(`Failed to extract functions from ${fileInfo.path}: ${error}`);
+      }
+
+      try {
+        classes = this.extractClasses(rootNode, content);
+      } catch (error) {
+        logger.debug(`Failed to extract classes from ${fileInfo.path}: ${error}`);
+      }
+
+      try {
+        imports = this.extractImports(rootNode, content);
+      } catch (error) {
+        logger.debug(`Failed to extract imports from ${fileInfo.path}: ${error}`);
+      }
+
+      try {
+        globalVariables = this.extractGlobalVariables(rootNode, content);
+      } catch (error) {
+        logger.debug(`Failed to extract global variables from ${fileInfo.path}: ${error}`);
+      }
+
+      try {
+        complexity = this.calculateComplexity(rootNode);
+      } catch (error) {
+        logger.debug(`Failed to calculate complexity for ${fileInfo.path}: ${error}`);
+      }
+
+      // Step 5: Enhanced analysis (with fallbacks)
+      let framework: FrameworkInfo | undefined;
+      let patterns: string[] = [];
+      let typeAnnotations = false;
+
+      try {
+        framework = this.detectFramework(imports, content);
+      } catch (error) {
+        logger.debug(`Failed to detect framework for ${fileInfo.path}: ${error}`);
+      }
+
+      try {
+        patterns = this.detectDesignPatterns(classes, functions);
+      } catch (error) {
+        logger.debug(`Failed to detect design patterns for ${fileInfo.path}: ${error}`);
+      }
+
+      try {
+        typeAnnotations = this.hasTypeAnnotations(functions, classes);
+      } catch (error) {
+        logger.debug(`Failed to detect type annotations for ${fileInfo.path}: ${error}`);
+      }
+
+
+      // Determine analysis status
+      let analysisStatus: 'success' | 'partial' | 'failed' = 'success';
+      const errors: string[] = [];
+      
+      if (hasParseErrors) {
+        errors.push('Parse errors detected');
+        analysisStatus = 'partial';
+      }
 
       const result: AnalysisResult = {
         filePath: fileInfo.path,
@@ -148,20 +304,41 @@ export class ASTAnalyzer {
         globalVariables,
         complexity,
         lines,
-        errors: rootNode.hasError() ? ['Parse errors detected'] : [],
+        errors,
         framework,
         patterns,
         typeAnnotations,
-        pythonVersion,
+        analysisStatus
       };
 
       const duration = Date.now() - startTime;
-      logger.info(`Analysis completed for ${fileInfo.path}: ${duration}ms`);
+      logger.debug(`Analysis completed for ${fileInfo.path}: ${duration}ms (status: ${analysisStatus})`);
+
+      if (analysisStatus === 'success') {
+        this.errorCollector.recordSuccess();
+      }
 
       return result;
+
     } catch (error) {
-      logger.error(`Failed to analyze file: ${fileInfo.path}`, error);
-      throw error;
+      const analysisError = error as Error;
+      const context: ErrorContext = {
+        fileSize: basicResult.lines ? undefined : await fs.stat(fileInfo.path).then(s => s.size).catch(() => undefined),
+        lineCount: basicResult.lines || undefined,
+        encoding: 'utf8'
+      };
+
+      if (continueOnError) {
+        this.errorCollector.logError(fileInfo.path, analysisError, context);
+        return { 
+          ...basicResult, 
+          errorMessage: analysisError.message,
+          analysisStatus: 'failed'
+        };
+      }
+      
+      // Re-throw if not continuing on error
+      throw analysisError;
     }
   }
 
@@ -788,32 +965,6 @@ export class ASTAnalyzer {
     return hasTypedFunctions || hasTypedAttributes;
   }
   
-  private detectPythonVersion(content: string, rootNode: Parser.SyntaxNode): string {
-    // Check for Python 3+ syntax
-    if (content.includes('async def') || content.includes('await ')) {
-      return '3.5+';
-    }
-    
-    if (content.includes('f"') || content.includes("f'")) {
-      return '3.6+';
-    }
-    
-    if (content.includes(':=')) { // Walrus operator
-      return '3.8+';
-    }
-    
-    if (content.includes('match ') && content.includes('case ')) {
-      return '3.10+';
-    }
-    
-    // Check for print statement vs function
-    const hasPrintStatement = this.findDeepChildByType(rootNode, 'print_statement');
-    if (hasPrintStatement) {
-      return '2.7';
-    }
-    
-    return '3.x';
-  }
 
   // Get analysis statistics
   getAnalysisStats(results: AnalysisResult[]): Record<string, any> {

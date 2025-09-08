@@ -93,4 +93,7 @@ export interface AnalyzeOptions extends CliOptions {
   maxFiles?: number;
   include?: string[];
   exclude?: string[];
+  continueOnError?: boolean;
+  errorReport?: boolean;
+  stopOnError?: boolean;
 }

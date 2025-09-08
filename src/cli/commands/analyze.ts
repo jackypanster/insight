@@ -2,12 +2,14 @@ import { Command } from 'commander';
 import path from 'path';
 import fs from 'fs-extra';
 import ora from 'ora';
+import chalk from 'chalk';
 import { logger } from '@/utils/logger.js';
 import { loadConfig } from '@/utils/config.js';
 import { FileScanner } from '@/core/scanner/FileScanner.js';
 import { ASTAnalyzer } from '@/core/analyzer/ASTAnalyzer.js';
 import { OpenRouterService } from '@/core/llm/OpenRouterService.js';
 import { DocumentationGenerator } from '@/core/generator/DocumentationGenerator.js';
+import { ErrorCollector } from '@/services/errors/ErrorCollector.js';
 import type { AnalyzeOptions } from '@/types/index.js';
 import type { CodeContext, LLMAnalysis } from '@/core/llm/OpenRouterService.js';
 import type { AnalysisResult } from '@/core/analyzer/ASTAnalyzer.js';
@@ -34,6 +36,9 @@ export function createAnalyzeCommand(): Command {
       'File patterns to exclude (e.g., "test*" "*.test.py")'
     )
     .option('-v, --verbose', 'Enable verbose logging')
+    .option('--continue-on-error', 'Continue analysis when files fail to parse (default: true)', true)
+    .option('--error-report', 'Generate detailed error report in JSON format')
+    .option('--stop-on-error', 'Stop analysis when first error occurs (opposite of continue-on-error)')
     .action(async (targetPath: string, options: AnalyzeOptions) => {
       const startTime = Date.now();
       const spinner = ora('Initializing analysis...').start();
@@ -44,7 +49,11 @@ export function createAnalyzeCommand(): Command {
           logger.setLevel(0); // DEBUG level
         }
 
+        // Determine error handling strategy
+        const continueOnError = options.stopOnError ? false : (options.continueOnError !== false);
+        
         logger.debug('Analyze command called with options:', options);
+        logger.debug(`Error handling strategy: ${continueOnError ? 'continue' : 'stop'} on error`);
 
         // Resolve and validate target path
         const resolvedPath = path.resolve(process.cwd(), targetPath);
@@ -106,27 +115,58 @@ export function createAnalyzeCommand(): Command {
 
         spinner.succeed(`Scanned ${scanResult.files.length} files`);
 
-        // Step 2: Analyze AST for each file
+        // Step 2: Initialize error collector and analyzer
+        const errorCollector = new ErrorCollector();
+        errorCollector.setTotalFiles(scanResult.files.length);
+        
+        // Step 3: Analyze AST for each file with error resilience
         spinner.start('Analyzing code structure...');
-        const analyzer = new ASTAnalyzer();
+        const analyzer = new ASTAnalyzer(errorCollector);
         const analyses: AnalysisResult[] = [];
         const astStartTime = Date.now();
+        let successCount = 0;
+        let partialCount = 0;
+        let failedCount = 0;
         
         for (let i = 0; i < scanResult.files.length; i++) {
           const fileInfo = scanResult.files[i];
           const progress = Math.round(((i + 1) / scanResult.files.length) * 100);
-          spinner.text = `🔍 Analyzing AST [${progress}%] (${i + 1}/${scanResult.files.length}): ${path.basename(fileInfo.path)}`;
           
-          try {
-            const analysis = await analyzer.analyzeFile(fileInfo);
-            analyses.push(analysis);
-          } catch (error) {
-            logger.warn(`Failed to analyze ${fileInfo.path}:`, error);
+          // Update spinner with color-coded status
+          const statusIcon = successCount > 0 ? 
+            (failedCount === 0 ? '✅' : '⚠️') : '🔍';
+          
+          spinner.text = `${statusIcon} Analyzing AST [${progress}%] (${i + 1}/${scanResult.files.length}): ${path.basename(fileInfo.path)}`;
+          
+          const analysis = await analyzer.analyzeFile(fileInfo, continueOnError);
+          analyses.push(analysis);
+          
+          // Track analysis status
+          switch (analysis.analysisStatus) {
+            case 'success':
+              successCount++;
+              break;
+            case 'partial':
+              partialCount++;
+              break;
+            case 'failed':
+              failedCount++;
+              if (!continueOnError) {
+                spinner.fail(`❌ Analysis failed for ${fileInfo.path}: ${analysis.errorMessage}`);
+                throw new Error(`Analysis failed: ${analysis.errorMessage}`);
+              }
+              break;
           }
         }
         
         const astDuration = ((Date.now() - astStartTime) / 1000).toFixed(1);
-        spinner.succeed(`✅ Analyzed ${analyses.length} files in ${astDuration}s`);
+        const statusText = `${successCount} ✅ | ${partialCount} ⚠️ | ${failedCount} ❌`;
+        
+        if (failedCount === 0) {
+          spinner.succeed(`✅ Analyzed ${analyses.length} files in ${astDuration}s (${statusText})`);
+        } else {
+          spinner.warn(`⚠️ Analyzed ${analyses.length} files in ${astDuration}s (${statusText})`);
+        }
 
         // Step 3: Generate LLM analysis
         spinner.start('Generating AI-powered documentation...');
@@ -195,14 +235,28 @@ export function createAnalyzeCommand(): Command {
         const genDuration = ((Date.now() - genStartTime) / 1000).toFixed(1);
         spinner.succeed(`✅ Documentation generated successfully in ${genDuration}s!`);
 
-        // Display summary
+        // Generate and export error report if requested
+        if (options.errorReport || errorCollector.hasErrors()) {
+          const errorReportPath = path.join(config.generation.outputDir, 'insight-errors.json');
+          await errorCollector.exportToFile(errorReportPath, resolvedPath);
+          
+          if (options.errorReport) {
+            logger.info(`\n📋 Error report saved to: ${errorReportPath}`);
+          }
+        }
+
+        // Display comprehensive summary including errors
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
         logger.success('\n╔═══════════════════════════════════════════════════════════════╗');
         logger.success('║               📚 Documentation Summary                          ║');
         logger.success('╚═══════════════════════════════════════════════════════════════╝');
+        
+        // Print error summary from ErrorCollector
+        errorCollector.printSummary();
+        
         logger.info('');
-        logger.info('  📊 Statistics:');
-        logger.info(`    • Total files analyzed: ${documentation.statistics.totalFiles}`);
+        logger.info('  📊 Documentation Statistics:');
+        logger.info(`    • Total files scanned: ${scanResult.files.length}`);
         logger.info(`    • Classes documented: ${documentation.statistics.totalClasses}`);
         logger.info(`    • Functions documented: ${documentation.statistics.totalFunctions}`);
         logger.info(`    • Total lines of code: ${documentation.statistics.totalLines}`);
