@@ -284,6 +284,24 @@ INSIGHT_MAX_WORKERS=4           # Concurrent processing
 - 🎯 CI/CD quality gates and automated testing
 - 🛡️ Error handling and resilience testing
 
+## 🎯 Frontend Visualization Philosophy
+
+### Core Principles - 不偏离初心
+
+1. **后端优先 (Backend First)**: 每个可视化功能都应该推动后端分析能力的提升
+2. **原子化开发 (Atomic Development)**: 每次只实现一个小功能，可独立PR合并
+3. **不破坏现有功能 (Non-Breaking)**: 保持现有markdown输出和API完整性
+4. **数据驱动 (Data-Driven)**: 前端展示倒逼后端产生更有价值的分析数据
+
+> ⚠️ **核心提醒**: 前端可视化的价值在于帮助发现后端分析的不足，每个图形化功能都应该引出一个问题："为了更好地展示这个，后端还需要分析什么？"
+
+### Technology Stack Decision
+- **Frontend Framework**: React (成熟度和模块化最高)
+- **Visualization Strategy**: 渐进式增强，不是重构
+- **Implementation**: 每个可视化特性独立开发，通过PR合并到主分支
+
+📚 **详细路线图**: 参见 [docs/visualization-roadmap.md](docs/visualization-roadmap.md)
+
 ## Phase 6: Language Expansion & Enterprise Features (Next)
 
 ### JavaScript/TypeScript Support
