@@ -33,8 +33,9 @@ docker exec insight-dev pnpm dev analyze ./examples
 # 查看帮助
 docker exec insight-dev pnpm dev --help
 
-# 或者使用我们的便捷脚本
-pnpm docker:dev  # 一键启动所有服务
+# 或者使用容器分离的架构（推荐）
+./insight-cli.sh ~/my-project        # 分析容器：代码分析和生成文档
+./insight-viewer.sh --open           # 查看容器：轻量级文档服务器
 ```
 
 > **🐳 完整部署指南**: 详细的安装、配置和故障排除请参考 **[部署文档](docs/deployment.md)**
@@ -66,12 +67,20 @@ pnpm docker:dev  # 一键启动所有服务
 - **Detailed Reporting**: Generates comprehensive error reports with retry recommendations
 - **Configurable Behavior**: Choose between continuing on errors (default) or stopping at first failure
 
-### 🌐 **Web Documentation Server** (Phase 5)
+### 🌐 **Web Documentation Server** (Phase 5) ✅
 - **Interactive Preview**: Browse generated documentation in your browser
 - **RESTful API**: Programmatic access to documentation data
 - **Real-time Updates**: Instantly view documentation changes
 - **Mobile Responsive**: Works seamlessly on all devices
 - **GitHub Integration**: Mermaid diagrams render natively in GitHub and web interface
+
+### 📊 **Enhanced Mermaid Visualization** (Iteration 1) ✅
+- **Interactive Diagrams**: 7+ diagram types with zoom, pan, and download (SVG/PNG)
+- **Architecture Analysis**: Class inheritance, module dependencies, and data flow
+- **Method Interactions**: Sequence diagrams showing method call chains
+- **State Machines**: Automatic detection and visualization of state-based classes
+- **Container Separation**: Lightweight viewer container optimized for documentation serving
+- **Enhanced Backend**: Improved diagram generation with architectural analysis
 
 ## Usage Examples
 
@@ -100,6 +109,26 @@ docker exec insight-dev pnpm dev analyze ./examples --output ./custom-docs
 
 # 指定特定模型（设置环境变量）
 docker exec -e MODEL=google/gemini-2.0-flash-lite-001 insight-dev pnpm dev analyze ./examples
+```
+
+### 容器分离架构（Iteration 1 新功能）
+```bash
+# 🔍 分析容器：重型计算任务
+./insight-cli.sh ~/my-python-project \
+  --output ./my-docs \
+  --verbose
+
+# 🌐 查看容器：轻量级Web服务
+./insight-viewer.sh \
+  --docs-dir ./my-docs \
+  --port 3000 \
+  --open
+
+# ✨ 功能特点
+# - 分析容器：包含所有分析工具、LLM集成、AST解析
+# - 查看容器：仅包含Web服务器和Mermaid渲染
+# - 独立部署：可以单独运行查看容器服务多个项目
+# - 资源优化：查看容器仅20MB，分析容器按需使用
 ```
 
 ### 文档服务
