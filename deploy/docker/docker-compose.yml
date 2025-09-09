@@ -9,12 +9,11 @@ services:
     container_name: insight-app
     ports:
       - "3000:3000"
+    env_file:
+      - ../../.env
     environment:
       - NODE_ENV=production
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - INSIGHT_LOG_LEVEL=${INSIGHT_LOG_LEVEL:-info}
       - INSIGHT_CACHE_DIR=/app/.insight-cache
-      - INSIGHT_MAX_WORKERS=${INSIGHT_MAX_WORKERS:-4}
     volumes:
       # Persistent data volumes
       - insight_docs:/app/insight-docs
@@ -40,20 +39,20 @@ services:
     ports:
       - "3000:3000"
       - "9229:9229"  # Node.js debug port
+    env_file:
+      - ../../.env
     environment:
       - NODE_ENV=development
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - INSIGHT_LOG_LEVEL=${INSIGHT_LOG_LEVEL:-debug}
       - INSIGHT_CACHE_DIR=/app/.insight-cache
-      - INSIGHT_MAX_WORKERS=${INSIGHT_MAX_WORKERS:-2}
     volumes:
       # Mount source code for hot reload
       - ../..:/app
+      # Mount generated docs to host directory  
+      - ../../insight-docs:/app/insight-docs
       # Persistent volumes for node_modules and cache
       - node_modules_dev:/app/node_modules
       - pnpm_store_dev:/root/.pnpm-store
       - insight_cache_dev:/app/.insight-cache
-      - insight_docs_dev:/app/insight-docs
     stdin_open: true
     tty: true
     command: ["dev-start"]
@@ -65,9 +64,10 @@ services:
       dockerfile: deploy/docker/Dockerfile.dev
     image: insight:test
     container_name: insight-test
+    env_file:
+      - ../../.env
     environment:
       - NODE_ENV=test
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     volumes:
       - ../..:/app
       - node_modules_test:/app/node_modules
@@ -88,8 +88,6 @@ volumes:
   pnpm_store_dev:
     driver: local
   insight_cache_dev:
-    driver: local
-  insight_docs_dev:
     driver: local
   
   # Test volumes

@@ -1,211 +1,179 @@
-# Known Issues
+# Insight 已知问题
 
-This document tracks current limitations and known issues with the Insight documentation generator running in Docker.
+本文档记录 Insight 文档生成器的当前限制和已知问题。
 
-## Current Version: v0.3.1 (Docker-based)
+> **📋 部署问题**: 如遇到安装或配置问题，请参考 [部署文档](deployment.md)
 
-### Docker-Specific Issues
+## 当前版本: v0.3.1
 
-#### Container Environment
-- **Port Conflicts**: Default port 3000 may conflict with other services
-  - **Solution**: Use `--port` flag or modify `docker-compose.yml`
-- **Volume Mounting**: Large projects may have slow file I/O on some Docker setups
-  - **Impact**: Affects analysis speed on Windows/macOS with large codebases
-- **Memory Limits**: Docker Desktop default memory limits may be insufficient
-  - **Recommended**: Set Docker to use at least 4GB RAM for large projects
+### 核心功能限制
 
-#### Platform-Specific Docker Issues
+#### Python 分析限制
+- **动态代码**: 无法分析动态生成的类和函数
+- **复杂装饰器**: 高级装饰器模式可能无法完全分析
+- **元类**: 对复杂元类模式支持有限
+- **导入解析**: 大型项目中复杂的导入路径可能被遗漏
 
-**Windows**
-- **Path Mounting**: Windows path formats may cause volume mounting issues
-  - **Workaround**: Use forward slashes in paths or WSL2
-- **Performance**: File watching slower due to Windows file system translation
+#### 框架检测准确性
+- **Django 项目**: 可能遗漏非标准的 Django 项目结构
+- **FastAPI 检测**: 依赖导入模式，可能遗漏动态导入
+- **数据科学**: 仅检测常见包（pandas, numpy, jupyter）
 
-**macOS**
-- **File Permissions**: Some macOS security settings may block container access
-- **Performance**: Large projects may be slow due to macOS Docker file system
+#### AST 分析边界情况  
+- **超大文件**: >10MB 的文件会被跳过（可配置）
+- **深层嵌套**: 极深的类层次结构可能超时
+- **编码问题**: 非 UTF-8 文件可能导致解析错误
 
-**Linux**
-- **User Permissions**: Container user ID may not match host user
-  - **Solution**: Use `USER_ID` and `GROUP_ID` environment variables
+### LLM 集成问题
 
-### Analysis Quality Issues
+#### API 可靠性
+- **速率限制**: OpenRouter API 可能在大项目中限制请求
+- **网络问题**: 网络连接问题可能导致 API 调用失败
+- **Token 限制**: 非常大的文件可能超出模型上下文窗口
+- **成本管理**: 没有内置成本跟踪或限制
 
-#### Python Analysis Limitations
-- **Dynamic Code**: Cannot analyze dynamically generated classes/functions
-- **Complex Decorators**: Advanced decorator patterns may not be fully analyzed  
-- **Metaclasses**: Limited support for complex metaclass patterns
-- **Import Resolution**: Complex import paths in large projects may be missed
+#### 文档质量
+- **上下文丢失**: 大文件可能在分析中丢失重要上下文
+- **风格不一致**: AI 生成的文档在不同文件间可能风格不同
+- **技术准确性**: 生成的文档应当人工审查
 
-#### Framework Detection Accuracy
-- **Django Projects**: May miss non-standard Django project structures
-- **FastAPI Detection**: Relies on import patterns, may miss dynamic imports
-- **Data Science**: Only detects common packages (pandas, numpy, jupyter)
+### 性能限制
 
-#### AST Analysis Edge Cases
-- **Very Large Files**: Files >10MB are skipped (configurable)
-- **Deeply Nested Code**: Extremely deep class hierarchies may timeout
-- **Unicode Issues**: Non-UTF8 files may cause parsing errors
+#### 资源使用
+- **内存**: 1000+ 文件的项目内存使用较高
+- **CPU**: AST 解析对复杂 Python 代码是 CPU 密集型
+- **磁盘 I/O**: 频繁的缓存读写可能影响性能
+- **网络**: API 调用为分析管道增加延迟
 
-### LLM Integration Issues
+#### 超时和限制
+- **单文件超时**: 分析超时 30 秒（可配置）
+- **最大文件大小**: 10MB（可配置，但可能导致内存问题）
+- **并发处理**: 受系统资源限制
 
-#### API Reliability
-- **Rate Limiting**: OpenRouter API may throttle requests on large projects
-- **Network Issues**: Container network problems can cause API failures
-- **Token Limits**: Very large files may exceed model context windows
-- **Cost Management**: No built-in cost tracking or limits
+## 🔧 解决方案和最佳实践
 
-#### Documentation Quality
-- **Context Loss**: Large files may lose important context in analysis
-- **Inconsistencies**: AI-generated docs may vary in style between files
-- **Technical Accuracy**: Generated documentation should be manually reviewed
-
-### Performance Constraints
-
-#### Resource Usage
-- **Memory**: High memory usage on projects with 1000+ files
-- **CPU**: AST parsing is CPU-intensive for complex Python code
-- **Disk I/O**: Frequent cache reads/writes may impact performance
-- **Network**: API calls add latency to analysis pipeline
-
-#### Timeouts and Limits
-- **Per-file timeout**: 30 seconds for analysis (configurable)
-- **Maximum file size**: 10MB (configurable but may cause memory issues)
-- **Concurrent processing**: Limited by container resources
-
-## Workarounds
-
-### For Large Projects
+### 大型项目处理
 ```bash
-# Use file limits and exclusion patterns
-docker run -v $(pwd):/workspace insight \
-  analyze /workspace --max-files 50 --exclude "**/tests/**"
+# 使用文件限制和排除模式
+pnpm dev analyze ./large-project --max-files 50 --exclude "**/tests/**"
 
-# Process in batches
-docker run -v $(pwd):/workspace insight \
-  analyze /workspace/src --max-files 20
+# 分批处理
+pnpm dev analyze ./src --max-files 20
+pnpm dev analyze ./lib --max-files 15
 ```
 
-### For Performance Issues
+### 性能优化
 ```bash
-# Increase Docker memory allocation
-# In Docker Desktop: Settings > Resources > Memory: 8GB
+# 使用更多 worker 进程（适合多核机器）
+export INSIGHT_MAX_WORKERS=8
+pnpm dev analyze ./project --max-files 30
 
-# Use local cache volume for better performance
-docker run -v insight-cache:/cache -v $(pwd):/workspace insight \
-  analyze /workspace --cache-dir /cache
+# 使用更快的模型
+export MODEL=google/gemini-2.0-flash-lite-001
+pnpm dev analyze ./project
 ```
 
-### For API Cost Management
+### API 成本管理  
 ```bash
-# Use cache aggressively
-docker run -v insight-cache:/cache -v $(pwd):/workspace insight \
-  analyze /workspace --cache-dir /cache --max-files 10
+# 积极使用缓存
+pnpm dev analyze ./project --max-files 10  # 首次运行
+pnpm dev analyze ./project --max-files 10  # 缓存命中，成本为零
 
-# Use cheaper models
-docker run -e MODEL=openai/gpt-3.5-turbo \
-  -v $(pwd):/workspace insight analyze /workspace
+# 使用成本更低的模型
+export MODEL=openai/gpt-3.5-turbo
+pnpm dev analyze ./project
 ```
 
-## Docker Deployment Best Practices
-
-### Resource Allocation
-- **Memory**: Minimum 2GB, recommended 4GB+ for large projects
-- **CPU**: No specific limits, but analysis is CPU-bound
-- **Storage**: Ensure adequate space for cache and generated docs
-
-### Volume Strategy
-```yaml
-version: '3.8'
-services:
-  insight:
-    volumes:
-      - ./:/workspace:ro          # Mount source code read-only
-      - ./insight-docs:/docs      # Mount output directory
-      - insight-cache:/cache      # Use named volume for cache
-      - insight-config:/config    # Persist configuration
-```
-
-### Environment Configuration
+### 错误处理最佳实践
 ```bash
-# Essential environment variables
-OPENROUTER_API_KEY=your_key_here
-INSIGHT_CACHE_DIR=/cache
-INSIGHT_LOG_LEVEL=info
-NODE_ENV=production
+# 继续处理错误文件（默认）
+pnpm dev analyze ./legacy-project --continue-on-error
+
+# 生成详细错误报告
+pnpm dev analyze ./problematic-project --error-report
+
+# 在第一个错误处停止（严格模式）
+pnpm dev analyze ./critical-project --stop-on-error
 ```
 
-## Current Limitations vs Roadmap
+## 🗓️ 发展路线图
 
-### Version 0.3.2 (Next Release)
-- [ ] Better Docker resource management
-- [ ] Improved error handling for container environments  
-- [ ] Enhanced caching strategies
-- [ ] Multi-stage analysis for large projects
+### 版本 0.3.2 (下一个版本)
+- [ ] 改进的错误处理和恢复机制
+- [ ] 增强的缓存策略和性能优化
+- [ ] 大项目多阶段分析支持
+- [ ] 更好的资源管理
 
-### Version 0.4.0 (Future)
-- [ ] Kubernetes deployment support
-- [ ] Distributed processing across containers
-- [ ] Real-time analysis with file watching
-- [ ] Web interface improvements
+### 版本 0.4.0 (未来版本)
+- [ ] JavaScript/TypeScript 语言支持
+- [ ] 实时文件监控和增量更新
+- [ ] Web 界面功能改进
+- [ ] 分布式处理支持
 
-### Version 0.5.0 (Long-term)
-- [ ] Multi-language support (JavaScript, Go, Java)
-- [ ] Plugin architecture for custom analyzers
-- [ ] Advanced caching with Redis
-- [ ] CI/CD pipeline integration
+### 版本 0.5.0 (长期目标)
+- [ ] 多语言支持 (Go, Java, C++)
+- [ ] 插件架构和自定义分析器
+- [ ] 高级缓存（Redis 支持）
+- [ ] CI/CD 管道集成
 
-## Reporting Docker-Specific Issues
+## 📝 问题报告
 
-When reporting issues, include:
-
-### Environment Details
-```bash
-# Docker information
-docker --version
-docker-compose --version
-docker system info
-
-# Container logs
-docker logs <container_id>
-
-# Host system
-uname -a  # Linux/macOS
-systeminfo  # Windows
-```
-
-### Issue Template
+### 报告模板
 ```markdown
-**Environment:**
-- Host OS: [e.g., macOS 14.1, Ubuntu 22.04, Windows 11]
-- Docker version: [e.g., 24.0.6]
-- Docker Compose version: [e.g., 2.21.0]
-- Available Memory: [e.g., 8GB]
-- Project size: [e.g., 150 files, 50K lines]
+**环境信息:**
+- 操作系统: [例如: macOS 14.1, Ubuntu 22.04, Windows 11]
+- Node.js 版本: [例如: v20.10.0]
+- 部署方式: [Docker/本地]
+- 项目规模: [例如: 150 文件, 50K 行代码]
 
-**Docker Command:**
+**复现步骤:**
+1. [具体操作步骤]
+2. [包含使用的命令]
+3. [相关配置]
+
+**预期行为:**
+[描述您期望发生什么]
+
+**实际行为:**
+[描述实际发生了什么]
+
+**日志输出:**
+[粘贴相关的错误信息或日志]
+```
+
+### 调试信息收集
 ```bash
-docker run -v $(pwd):/workspace insight analyze /workspace --verbose
+# 收集系统信息
+pnpm dev --version
+node --version
+
+# 启用详细日志
+export INSIGHT_LOG_LEVEL=debug
+pnpm dev analyze ./project --verbose
+
+# 检查配置文件
+cat .env | grep -v "KEY"  # 隐藏敏感信息
+cat insight.config.json
 ```
 
-**Container Logs:**
-[Paste relevant container output]
+## 🤝 贡献指南
 
-**Expected vs Actual:**
-[Describe what you expected vs what happened]
-```
+帮助解决这些问题的方式：
 
-## Contributing
-
-To help resolve these issues:
-
-1. **Test on Different Platforms**: Help test on Windows/Linux/macOS
-2. **Performance Profiling**: Identify bottlenecks in container environments
-3. **Documentation**: Improve Docker setup and troubleshooting guides
-4. **Error Handling**: Better graceful degradation when resources are limited
+1. **跨平台测试**: 在不同操作系统上测试功能
+2. **性能分析**: 识别性能瓶颈和优化机会
+3. **文档改进**: 完善部署和故障排除指南
+4. **错误处理**: 改进资源受限时的优雅降级
 
 ---
 
-*Last updated: 2025-01-09*  
-*Docker-based deployment - Installation issues resolved*  
-*For deployment guide, see [docs/deployment.md](deployment.md)*
+## 🔗 相关文档
+
+- 🚀 **部署问题**: 请参考 [部署文档](deployment.md)
+- 🧪 **功能测试**: 查看 [测试指南](testing-guide.md)
+- 📖 **使用说明**: 查看 [项目 README](../README.md)
+
+---
+
+*最后更新: 2025-01-09*  
+*专注问题和解决方案 - 部署配置请参考部署文档*
