@@ -2,9 +2,9 @@
 
 AI-powered legacy code documentation generator that automatically analyzes codebases and generates comprehensive, multi-dimensional documentation.
 
-## 🐳 Quick Start (Docker - 推荐)
+## 🚀 Quick Start
 
-使用 Docker 一键启动，无需担心环境配置问题：
+### 1分钟快速开始
 
 ```bash
 # 克隆项目
@@ -15,42 +15,29 @@ cd insight
 cp .env.example .env
 # 编辑 .env 添加 OPENROUTER_API_KEY
 
-# 一键启动开发环境
+# 一键启动（推荐使用Docker）
 pnpm docker:dev
-
-# 或直接使用脚本
-./deploy/scripts/docker-dev.sh
 ```
 
-**就这么简单！** Docker 环境会自动：
-- 解决所有原生模块编译问题
-- 提供一致的 Node.js 20 + Python 3 环境
-- 支持热重载和调试
-- 在 http://localhost:3000 提供 Web 界面
+访问 http://localhost:3000 查看生成的文档！
 
-## 📦 传统安装方式
-
-如果您偏好本地环境：
+### 基本使用
 
 ```bash
-# Install dependencies
-npm install -g pnpm
-pnpm install
+# 分析 Python 项目（在 Docker 容器中运行）
+docker exec insight-dev pnpm dev analyze ./examples
 
-# Set up API key
-export OPENROUTER_API_KEY="your-openrouter-key-here"
+# 启动文档服务器（Web 界面自动可用）
+# 访问 http://localhost:3000
 
-# Initialize configuration
-pnpm dev init
+# 查看帮助
+docker exec insight-dev pnpm dev --help
 
-# Analyze a Python codebase
-pnpm dev analyze ./your-python-project
-
-# Preview documentation in browser
-pnpm dev serve --open
+# 或者使用我们的便捷脚本
+pnpm docker:dev  # 一键启动所有服务
 ```
 
-> **注意**: 本地安装可能遇到 tree-sitter 编译问题，建议使用 Docker 方案。
+> **🐳 完整部署指南**: 详细的安装、配置和故障排除请参考 **[部署文档](docs/deployment.md)**
 
 ## Features
 
@@ -86,223 +73,87 @@ pnpm dev serve --open
 - **Mobile Responsive**: Works seamlessly on all devices
 - **GitHub Integration**: Mermaid diagrams render natively in GitHub and web interface
 
-## Installation
+## Usage Examples
 
-### Prerequisites
-- Node.js 20+
-- pnpm package manager
-- OpenRouter API key
-- **Python 3.6+** projects (Python 2 is not supported)
-
-### Setup
+### 基本分析
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd insight
+# 确保 Docker 开发环境正在运行
+pnpm docker:dev
 
-# Install pnpm globally
-npm install -g pnpm
+# 分析整个 Python 项目
+docker exec insight-dev pnpm dev analyze ./examples
 
-# Install dependencies
-pnpm install
+# 分析特定目录并限制文件数量
+docker exec insight-dev pnpm dev analyze ./examples --max-files 5 --verbose
 
-# Create environment file
-cp .env.example .env
-# Edit .env and add your OPENROUTER_API_KEY
-
-# Optional: Set preferred model (default: anthropic/claude-3.5-sonnet)
-export MODEL="google/gemini-2.0-flash-lite-001"  # For faster, cheaper analysis
+# 生成详细错误报告
+docker exec insight-dev pnpm dev analyze ./examples --error-report
 ```
 
-## Usage
-
-### Initialize Project Configuration
+### 配置管理
 ```bash
-pnpm dev init
-```
-This creates an `insight.config.json` file with your preferences for LLM provider, output directory, and scanning options.
+# 初始化项目配置（在容器中）
+docker exec insight-dev pnpm dev init
 
-### Analyze a Codebase
+# 使用自定义输出目录
+docker exec insight-dev pnpm dev analyze ./examples --output ./custom-docs
+
+# 指定特定模型（设置环境变量）
+docker exec -e MODEL=google/gemini-2.0-flash-lite-001 insight-dev pnpm dev analyze ./examples
+```
+
+### 文档服务
 ```bash
-# Basic analysis
-pnpm dev analyze /path/to/your/python/project
+# Web 服务器在 Docker 环境启动时自动运行
+# 直接访问 http://localhost:3000
 
-# With options
-pnpm dev analyze ./src --verbose --output ./documentation
+# 检查服务状态
+curl http://localhost:3000/api/health
 
-# Limit number of files (useful for testing)
-pnpm dev analyze ./src --max-files 10
-
-# Error handling options
-pnpm dev analyze ./src --continue-on-error  # Continue when files fail (default)
-pnpm dev analyze ./src --stop-on-error      # Stop at first error
-pnpm dev analyze ./src --error-report       # Generate detailed error report
-
-# Get help
-pnpm dev analyze --help
+# 查看可用的 API 端点
+curl http://localhost:3000/api/docs
 ```
 
-### Preview Documentation
-```bash
-# Start web server and open browser
-pnpm dev serve --open
+## 📊 输出文档结构
 
-# Custom port and host
-pnpm dev serve --port 3001 --host 0.0.0.0
+生成的文档保存在 `insight-docs/` 目录：
 
-# Serve specific documentation directory
-pnpm dev serve --docs-dir ./my-custom-docs
-
-# API endpoints available:
-# GET /                    - Home page with documentation overview
-# GET /api/docs           - List all documentation files
-# GET /api/docs/:file     - Get specific file content
-# GET /api/health         - Health check endpoint
-```
-
-### Error Handling
-
-Insight is designed to be resilient when analyzing real-world codebases that may contain problematic files:
-
-```bash
-# Default behavior - continue on errors with summary
-pnpm dev analyze ./legacy-project
-
-# Generate detailed error report
-pnpm dev analyze ./legacy-project --error-report
-
-# Stop immediately if any file fails to parse  
-pnpm dev analyze ./critical-project --stop-on-error
-```
-
-#### Error Categories
-- **Syntax Errors**: Invalid Python syntax, missing colons, indentation issues
-- **Encoding Issues**: Non-UTF8 files or character encoding problems
-- **File Access**: Permission denied, file locked, or network file system issues
-- **Resource Limits**: Files too large (>10MB) or parsing timeouts (>30s)
-- **Parsing Errors**: Complex syntax that tree-sitter cannot handle
-
-#### Error Report Format
-Error reports are saved as `insight-errors.json` with detailed information:
-```json
-{
-  "summary": {
-    "total_files": 100,
-    "successful": 95,
-    "failed": 5,
-    "success_rate": "95%"
-  },
-  "errors": [
-    {
-      "file": "complex/advanced_script.py",
-      "error_type": "syntax_error", 
-      "message": "invalid syntax at line 45",
-      "can_retry": false,
-      "context": {
-        "file_size": 1024,
-        "line_count": 50,
-        "encoding": "utf-8"
-      }
-    }
-  ]
-}
-```
-
-### Performance
-
-With intelligent caching, subsequent analyses are near-instantaneous:
-- **First run**: Full API analysis (e.g., 89s for 5 files)
-- **Cached run**: 0s with 100% cache hit rate
-- **Cache location**: `.insight-cache/` (configurable)
-
-### Output Structure
-Generated documentation will be saved to `insight-docs/` (configurable):
 ```
 insight-docs/
-├── README.md           # Project overview with statistics and framework detection
-├── ARCHITECTURE.md     # Enhanced architecture with Mermaid diagrams and patterns
-│                      # • Class inheritance diagrams
-│                      # • Module dependency graphs
-│                      # • Component classification
-│                      # • Design pattern analysis
-├── STATISTICS.json     # Detailed metrics with complexity distribution
-└── files/             # Per-file detailed documentation
-    ├── main.md        # Main module with framework-aware analysis
-    └── *.md           # Each file with pattern recognition and recommendations
+├── README.md           # 项目概览和统计信息
+├── ARCHITECTURE.md     # 架构分析和Mermaid图表
+├── STATISTICS.json     # 详细指标和复杂度分析
+└── files/             # 各文件详细文档
+    └── *.md           # 每个文件的分析结果
 ```
 
-## Configuration
+## ⚙️ 环境要求
 
-Edit `insight.config.json` to customize:
+### 🐳 Docker 方式（强烈推荐）
+- **Docker**: 20.x+ 
+- **Docker Compose**: 2.x+
+- **API Key**: OpenRouter 或 Anthropic/OpenAI
+- **分析项目**: Python 3.6+
 
-```json
-{
-  "llm": {
-    "provider": "openrouter",
-    "models": {
-      "primary": "anthropic/claude-3.5-sonnet",
-      "fallback": "openai/gpt-3.5-turbo"
-    }
-  },
-  "scanning": {
-    "includeExtensions": [".py"],
-    "ignorePaths": ["__pycache__", ".git", "venv"]
-  },
-  "generation": {
-    "outputDir": "insight-docs"
-  }
-}
-```
+### 📦 本地安装方式
+- **Node.js**: 20+
+- **pnpm**: 8.0+
+- **系统依赖**: C++ 编译工具（用于 tree-sitter）
+- **⚠️ 注意**: 可能遇到原生模块编译问题
 
-## Development
+> **💡 为什么推荐 Docker**: 避免 tree-sitter 原生模块编译问题，确保一致的运行环境
 
-### 🐳 Docker Commands (推荐)
-```bash
-# 开发环境
-pnpm docker:dev              # 启动开发环境
-pnpm docker:dev:bg           # 后台启动开发环境
-pnpm docker:dev:rebuild      # 重建并启动开发环境
+详细的安装和配置步骤请参考 **[部署文档](docs/deployment.md)**
 
-# 构建镜像
-pnpm docker:build            # 构建生产镜像
-pnpm docker:build:dev        # 构建开发镜像
+## 🔑 API 配置
 
-# 测试
-pnpm docker:test             # 运行所有测试
-pnpm docker:test --unit      # 运行单元测试
-pnpm docker:test --coverage  # 生成覆盖率报告
+在 [openrouter.ai](https://openrouter.ai) 获取 OpenRouter API Key，支持多个 LLM 提供商。
 
-# 清理
-pnpm docker:clean            # 清理容器
-pnpm docker:clean --all      # 清理所有 Docker 资源
-```
+也支持直接 API：
+- `ANTHROPIC_API_KEY` - Claude 直接访问
+- `OPENAI_API_KEY` - OpenAI 直接访问
 
-### 📦 传统 Commands
-```bash
-pnpm dev              # Run in development mode
-pnpm build            # Build TypeScript
-pnpm test             # Run tests
-pnpm lint             # Check code style
-pnpm format           # Format code
-```
-
-### Project Structure
-```
-src/
-├── cli/              # CLI commands
-├── core/             # Core analysis logic
-├── services/         # External service integrations
-├── utils/            # Shared utilities
-└── types/            # TypeScript definitions
-```
-
-## API Keys
-
-Get your OpenRouter API key at [openrouter.ai](https://openrouter.ai). OpenRouter provides access to multiple LLM providers through a single API.
-
-Alternative direct API support:
-- `ANTHROPIC_API_KEY` for direct Claude API access
-- `OPENAI_API_KEY` for direct OpenAI API access
+详细配置方法请参考 [部署文档](docs/deployment.md#配置管理)。
 
 ## Roadmap
 
@@ -359,11 +210,14 @@ Alternative direct API support:
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## Support
+## 📚 文档和支持
 
-- 📖 [Documentation](./docs/)
-- 🐛 [Issues](https://github.com/your-org/insight/issues)
-- 💬 [Discussions](https://github.com/your-org/insight/discussions)
+- 🚀 [快速开始 - 部署指南](docs/deployment.md)
+- 🧪 [测试指南](docs/testing-guide.md)
+- 🔧 [已知问题](docs/known-issues.md)
+- 📖 [完整文档](./docs/)
+- 🐛 [问题反馈](https://github.com/your-org/insight/issues)
+- 💬 [讨论交流](https://github.com/your-org/insight/discussions)
 
 ---
 

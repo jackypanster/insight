@@ -79,7 +79,8 @@ done
 # Clean up if requested
 if [ "$CLEAN" = true ]; then
     echo -e "${YELLOW}🧹 Cleaning up containers and volumes...${NC}"
-    docker compose -f deploy/docker/docker-compose.yml down -v --remove-orphans 2>/dev/null || true
+    cd deploy/docker && docker compose down -v --remove-orphans 2>/dev/null || true
+    cd "$PROJECT_ROOT"
     docker volume prune -f 2>/dev/null || true
     echo -e "${GREEN}✅ Cleanup completed${NC}"
 fi
@@ -87,7 +88,8 @@ fi
 # Build/rebuild image if requested
 if [ "$REBUILD" = true ]; then
     echo -e "${YELLOW}🔨 Building development image...${NC}"
-    docker compose -f deploy/docker/docker-compose.yml build insight-dev --no-cache
+    cd deploy/docker && docker compose build insight-dev --no-cache
+    cd "$PROJECT_ROOT"
     echo -e "${GREEN}✅ Build completed${NC}"
 fi
 
@@ -95,7 +97,8 @@ fi
 echo -e "${BLUE}🚀 Starting development environment...${NC}"
 
 if [ "$BACKGROUND" = true ]; then
-    docker compose -f deploy/docker/docker-compose.yml up insight-dev -d
+    cd deploy/docker && docker compose up insight-dev -d
+    cd "$PROJECT_ROOT"
     echo -e "${GREEN}✅ Development environment started in background${NC}"
     echo -e "${BLUE}📝 View logs with: docker logs -f insight-dev${NC}"
     echo -e "${BLUE}🌐 Web server: http://localhost:3000${NC}"
@@ -108,7 +111,7 @@ else
     echo ""
     
     # Trap Ctrl+C to gracefully stop
-    trap 'echo -e "\n${YELLOW}🛑 Stopping development environment...${NC}"; docker compose -f deploy/docker/docker-compose.yml stop insight-dev; exit 0' INT
+    trap 'echo -e "\n${YELLOW}🛑 Stopping development environment...${NC}"; cd deploy/docker && docker compose stop insight-dev; cd "$PROJECT_ROOT"; exit 0' INT
     
-    docker compose -f deploy/docker/docker-compose.yml up insight-dev
+    cd deploy/docker && docker compose up insight-dev
 fi
