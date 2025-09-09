@@ -28,7 +28,15 @@ export function createServeCommand(): Command {
     .option('-v, --verbose', 'Enable verbose logging')
     .option('-o, --open', 'Open browser automatically')
     .action(async (options: ServeOptions) => {
-      const spinner = ora('Starting documentation server...').start();
+      // Disable spinner in CI/container environments to avoid ANSI issues
+      const isCI = process.env.CI || process.env.DOCKER_CONTAINER || !process.stdout.isTTY;
+      const spinner = isCI ? { 
+        text: '', 
+        start: () => spinner, 
+        succeed: (msg?: string) => { if (msg) logger.success(msg); return spinner; },
+        fail: (msg?: string) => { if (msg) logger.error(msg); return spinner; },
+        warn: (msg?: string) => { if (msg) logger.warn(msg); return spinner; }
+      } : ora('Starting documentation server...').start();
 
       try {
         // Set verbose logging if requested

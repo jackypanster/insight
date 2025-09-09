@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Production service
   insight:
@@ -36,6 +34,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.dev
+      target: development
     image: insight:dev
     container_name: insight-dev
     ports:
