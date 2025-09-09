@@ -1,44 +1,51 @@
-import express, { Request, Response } from 'express';
+#!/usr/bin/env node
+
+// Lightweight viewer entry point - only web server functionality
+import express from 'express';
 import cors from 'cors';
-import path from 'path';
 import fs from 'fs-extra';
-import { logger } from '@/utils/logger.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-export interface WebServerOptions {
-  port: number;
-  host: string;
-  docsDir: string;
-  verbose?: boolean;
-}
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-export class WebServer {
-  private app: express.Application;
-  private server: any;
-  private options: WebServerOptions;
+// Simple logger for viewer
+const logger = {
+  info: (msg, ...args) => console.log(`[INFO] ${msg}`, ...args),
+  success: (msg, ...args) => console.log(`✅ ${msg}`, ...args),
+  error: (msg, ...args) => console.error(`❌ ${msg}`, ...args),
+  warn: (msg, ...args) => console.warn(`⚠️ ${msg}`, ...args)
+};
 
-  constructor(options: WebServerOptions) {
-    this.options = options;
+// Minimal WebServer class
+class SimpleWebServer {
+  constructor(options) {
+    this.options = {
+      port: options.port || 3000,
+      host: options.host || '0.0.0.0', // Important: bind to all interfaces
+      docsDir: options.docsDir || '/app/docs',
+      ...options
+    };
     this.app = express();
     this.setupMiddleware();
     this.setupRoutes();
   }
 
-  private setupMiddleware(): void {
+  setupMiddleware() {
     // Enable CORS
     this.app.use(cors());
     
     // Parse JSON bodies
     this.app.use(express.json());
     
-    // Logging middleware
-    if (this.options.verbose) {
-      this.app.use((req, res, next) => {
-        logger.debug(`${req.method} ${req.path}`);
-        next();
-      });
-    }
+    // Request logging
+    this.app.use((req, res, next) => {
+      logger.info(`${req.method} ${req.path}`);
+      next();
+    });
 
-    // Middleware to prevent direct access to markdown files
+    // Serve static files (non-markdown only)
     this.app.use((req, res, next) => {
       if (req.path.endsWith('.md')) {
         // Let route handlers process markdown files
@@ -58,9 +65,9 @@ export class WebServer {
     });
   }
 
-  private setupRoutes(): void {
+  setupRoutes() {
     // API route to get documentation structure
-    this.app.get('/api/docs', async (req: Request, res: Response) => {
+    this.app.get('/api/docs', async (req, res) => {
       try {
         const docsStructure = await this.getDocsStructure();
         res.json(docsStructure);
@@ -71,7 +78,7 @@ export class WebServer {
     });
 
     // API route to get specific documentation file
-    this.app.get('/api/docs/:filename', async (req: Request, res: Response) => {
+    this.app.get('/api/docs/:filename', async (req, res) => {
       try {
         const filename = req.params.filename;
         const filePath = path.join(this.options.docsDir, filename);
@@ -97,19 +104,20 @@ export class WebServer {
     });
 
     // Health check endpoint
-    this.app.get('/api/health', (req: Request, res: Response) => {
+    this.app.get('/api/health', (req, res) => {
       res.json({ 
         status: 'ok', 
         timestamp: new Date().toISOString(),
         docsDir: this.options.docsDir,
-        uptime: process.uptime()
+        uptime: process.uptime(),
+        version: '1.0.0-viewer'
       });
     });
 
     // Route to handle all markdown files with HTML wrapping
-    this.app.get('/*.md', async (req: Request, res: Response) => {
+    this.app.get('/*.md', async (req, res) => {
       try {
-        const requestedFile = req.params[0] + '.md'; // Get the filename from the route parameter
+        const requestedFile = req.params[0] + '.md';
         const filePath = path.join(this.options.docsDir, requestedFile);
         
         if (!(await fs.pathExists(filePath))) {
@@ -126,10 +134,9 @@ export class WebServer {
       }
     });
 
-    // Catch-all route for SPA-style routing
-    this.app.get('*', async (req: Request, res: Response) => {
+    // Catch-all route for main page
+    this.app.get('*', async (req, res) => {
       try {
-        // Try to serve index.html if it exists, otherwise fallback to README.md
         const indexPath = path.join(this.options.docsDir, 'index.html');
         const readmePath = path.join(this.options.docsDir, 'README.md');
         
@@ -149,8 +156,8 @@ export class WebServer {
     });
   }
 
-  private async getDocsStructure(): Promise<any> {
-    const structure: any = {
+  async getDocsStructure() {
+    const structure = {
       files: [],
       directories: [],
       totalFiles: 0,
@@ -196,8 +203,8 @@ export class WebServer {
     return structure;
   }
 
-  private async getDirectoryStructure(dirPath: string): Promise<any> {
-    const structure: any = {
+  async getDirectoryStructure(dirPath) {
+    const structure = {
       files: [],
       directories: [],
       totalFiles: 0
@@ -236,7 +243,7 @@ export class WebServer {
     return structure;
   }
 
-  private wrapMarkdownInHTML(markdown: string, title: string): string {
+  wrapMarkdownInHTML(markdown, title) {
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -307,7 +314,7 @@ export class WebServer {
         .nav a:hover {
             background: #005c99;
         }
-        /* Mermaid diagram styling */
+        /* Mermaid diagram styling with interactive controls */
         .mermaid-container {
             text-align: center;
             margin: 20px 0;
@@ -342,8 +349,8 @@ export class WebServer {
 <body>
     <div class="container">
         <div class="header">
-            <h1>📚 Insight Documentation</h1>
-            <p>AI-powered Legacy Code Documentation Generator</p>
+            <h1>📚 Insight Documentation (Viewer)</h1>
+            <p>Lightweight Documentation Server</p>
         </div>
         
         <div class="nav">
@@ -357,7 +364,7 @@ export class WebServer {
         </div>
     </div>
     <script>
-        // Initialize Mermaid with custom configuration
+        // Initialize Mermaid with enhanced configuration
         mermaid.initialize({ 
             startOnLoad: true,
             theme: 'default',
@@ -409,13 +416,12 @@ export class WebServer {
                 // Add controls
                 const controls = document.createElement('div');
                 controls.className = 'diagram-controls';
-                controls.innerHTML = \`
-                    <button class="diagram-btn" onclick="downloadDiagram(\${index}, 'svg')">📥 SVG</button>
-                    <button class="diagram-btn" onclick="downloadDiagram(\${index}, 'png')">📥 PNG</button>
-                    <button class="diagram-btn" onclick="zoomDiagram(\${index}, 1.2)">🔍 Zoom In</button>
-                    <button class="diagram-btn" onclick="zoomDiagram(\${index}, 0.8)">🔍 Zoom Out</button>
-                    <button class="diagram-btn" onclick="resetZoom(\${index})">↻ Reset</button>
-                \`;
+                controls.innerHTML = 
+                    '<button class="diagram-btn" onclick="downloadDiagram(' + index + ', \\'svg\\')">📥 SVG</button>' +
+                    '<button class="diagram-btn" onclick="downloadDiagram(' + index + ', \\'png\\')">📥 PNG</button>' +
+                    '<button class="diagram-btn" onclick="zoomDiagram(' + index + ', 1.2)">🔍 Zoom In</button>' +
+                    '<button class="diagram-btn" onclick="zoomDiagram(' + index + ', 0.8)">🔍 Zoom Out</button>' +
+                    '<button class="diagram-btn" onclick="resetZoom(' + index + ')">↻ Reset</button>';
                 container.appendChild(controls);
                 
                 // Add zoom/pan support
@@ -438,7 +444,7 @@ export class WebServer {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = \`diagram-\${index + 1}.svg\`;
+                a.download = 'diagram-' + (index + 1) + '.svg';
                 a.click();
                 URL.revokeObjectURL(url);
             } else if (format === 'png') {
@@ -461,7 +467,7 @@ export class WebServer {
                         const pngUrl = URL.createObjectURL(pngBlob);
                         const a = document.createElement('a');
                         a.href = pngUrl;
-                        a.download = \`diagram-\${index + 1}.png\`;
+                        a.download = 'diagram-' + (index + 1) + '.png';
                         a.click();
                         URL.revokeObjectURL(pngUrl);
                         URL.revokeObjectURL(url);
@@ -495,7 +501,7 @@ export class WebServer {
             const y = diagram.dataset.translateY || '0';
             const svg = diagram.querySelector('svg');
             if (svg) {
-                svg.style.transform = \`scale(\${zoom}) translate(\${x}px, \${y}px)\`;
+                svg.style.transform = 'scale(' + zoom + ') translate(' + x + 'px, ' + y + 'px)';
                 svg.style.transformOrigin = 'center center';
             }
         }
@@ -511,23 +517,19 @@ export class WebServer {
     `;
   }
 
-  private processMermaidBlocks(markdown: string): string {
-    // Enhanced regex to handle mermaid code blocks with optional language identifiers
-    const mermaidRegex = /```(?:mermaid|mer)\s*\n([\s\S]*?)\n```/gi;
+  processMermaidBlocks(markdown) {
+    const mermaidRegex = /```(?:mermaid|mer)\\s*\\n([\\s\\S]*?)\\n```/gi;
     let diagramIndex = 0;
     
     const processed = markdown.replace(mermaidRegex, (match, diagramContent) => {
-      // Clean up the diagram content
       const cleanContent = diagramContent.trim();
       
       if (!cleanContent) {
-        return match; // Return original if empty
+        return match;
       }
       
-      // Generate unique ID for this diagram
       const diagramId = `mermaid-diagram-${diagramIndex++}`;
       
-      // Return the processed mermaid div that will be rendered by mermaid.js
       return `</pre>
 <div class="mermaid" id="${diagramId}">
 ${cleanContent}
@@ -538,7 +540,7 @@ ${cleanContent}
     return processed;
   }
 
-  private create404Page(): string {
+  create404Page() {
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -547,52 +549,15 @@ ${cleanContent}
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>404 - Documentation Not Found</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            text-align: center;
-            padding: 50px;
-            background: #fafafa;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-align: center; padding: 50px; background: #fafafa; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #e74c3c; }
-        p { color: #666; }
-        .suggestion {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .command {
-            background: #2c3e50;
-            color: white;
-            padding: 10px;
-            border-radius: 3px;
-            font-family: monospace;
-            display: inline-block;
-            margin: 10px 0;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📄 Documentation Not Found</h1>
-        <p>The documentation directory <code>${this.options.docsDir}</code> appears to be empty or doesn't exist.</p>
-        
-        <div class="suggestion">
-            <h3>💡 Getting Started</h3>
-            <p>Generate documentation for your project:</p>
-            <div class="command">insight analyze /path/to/your/project</div>
-            <p>Then serve the documentation:</p>
-            <div class="command">insight serve</div>
-        </div>
-        
+        <p>The documentation directory <code>${this.options.docsDir}</code> appears to be empty.</p>
         <p><a href="/api/health">Check server health</a> | <a href="/api/docs">View API</a></p>
     </div>
 </body>
@@ -600,17 +565,17 @@ ${cleanContent}
     `;
   }
 
-  public async start(): Promise<void> {
+  async start() {
     return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.options.port, this.options.host, () => {
-        logger.success(`🌐 Documentation server running at http://${this.options.host}:${this.options.port}`);
+        logger.success(`🌐 Lightweight viewer server running at http://${this.options.host}:${this.options.port}`);
         logger.info(`📁 Serving documentation from: ${this.options.docsDir}`);
         resolve();
       });
 
-      this.server.on('error', (error: any) => {
+      this.server.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
-          reject(new Error(`Port ${this.options.port} is already in use. Please try a different port.`));
+          reject(new Error(`Port ${this.options.port} is already in use.`));
         } else {
           reject(error);
         }
@@ -618,14 +583,69 @@ ${cleanContent}
     });
   }
 
-  public async stop(): Promise<void> {
+  async stop() {
     if (this.server) {
       return new Promise((resolve) => {
         this.server.close(() => {
-          logger.info('📡 Documentation server stopped');
+          logger.info('📡 Viewer server stopped');
           resolve();
         });
       });
     }
   }
 }
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+const options = {
+  port: 3000,
+  host: '0.0.0.0',
+  docsDir: '/app/docs'
+};
+
+// Simple argument parsing
+for (let i = 0; i < args.length; i++) {
+  switch (args[i]) {
+    case '--port':
+      options.port = parseInt(args[++i]);
+      break;
+    case '--host':
+      options.host = args[++i];
+      break;
+    case '--docs-dir':
+      options.docsDir = args[++i];
+      break;
+  }
+}
+
+// Start the server
+const server = new SimpleWebServer(options);
+
+server.start().then(() => {
+  logger.success('✅ Lightweight Insight Viewer started successfully!');
+  logger.info('');
+  logger.info('╔═══════════════════════════════════════════════════════════════╗');
+  logger.info('║                📚 Lightweight Viewer Ready                     ║');
+  logger.info('╚═══════════════════════════════════════════════════════════════╝');
+  logger.info('');
+  logger.info(`  🌐 Server URL:        http://${options.host === '0.0.0.0' ? 'localhost' : options.host}:${options.port}`);
+  logger.info(`  📁 Documentation:     ${options.docsDir}`);
+  logger.info('  🎯 Features: Mermaid diagrams, API endpoints, responsive design');
+  logger.info('');
+}).catch((error) => {
+  logger.error('Failed to start viewer server:', error);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  logger.info('\\n🛑 Shutting down viewer server...');
+  await server.stop();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('\\n🛑 Shutting down viewer server...');
+  await server.stop();
+  process.exit(0);
+});

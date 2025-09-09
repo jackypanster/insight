@@ -1,0 +1,29 @@
+# Lightweight Viewer-Only Docker Image
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install only essential system dependencies
+RUN apk add --no-cache \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Copy viewer-specific package.json
+COPY deploy/docker/viewer-package.json package.json
+
+# Install only production dependencies needed for web server
+RUN npm install --production --no-optional
+
+# Copy the enhanced viewer entry point (self-contained)
+COPY deploy/docker/viewer-entry.js viewer.js
+
+# Expose port 3000
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Start the viewer server
+CMD ["node", "viewer.js"]
