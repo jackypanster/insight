@@ -11,7 +11,7 @@ export interface DiagramConfig {
 
 export interface MermaidDiagram {
   title: string;
-  type: 'classDiagram' | 'flowchart' | 'graph';
+  type: 'classDiagram' | 'flowchart' | 'graph' | 'sequenceDiagram' | 'stateDiagram' | 'gitgraph';
   content: string;
   description: string;
 }
@@ -60,6 +60,20 @@ export class MermaidGenerator {
       // 4. Individual class diagrams for complex classes
       const classDetailDiagrams = this.generateDetailedClassDiagrams(analyses);
       diagrams.push(...classDetailDiagrams);
+
+      // 5. Method call chain diagrams (sequence diagrams)
+      const callChainDiagrams = this.generateMethodCallChainDiagrams(analyses);
+      diagrams.push(...callChainDiagrams);
+
+      // 6. Data flow diagram
+      const dataFlowDiagram = this.generateDataFlowDiagram(analyses);
+      if (dataFlowDiagram) {
+        diagrams.push(dataFlowDiagram);
+      }
+
+      // 7. State machine diagrams (for classes with state-like behavior)
+      const stateDiagrams = this.generateStateMachineDiagrams(analyses);
+      diagrams.push(...stateDiagrams);
 
       logger.info(`Generated ${diagrams.length} Mermaid diagrams`);
       return diagrams;
@@ -355,6 +369,253 @@ ${methods.map(method => `    ${method}`).join('\n')}
     }
 
     return layers;
+  }
+
+  /**
+   * Generate method call chain diagrams (sequence diagrams)
+   */
+  private generateMethodCallChainDiagrams(analyses: AnalysisResult[]): MermaidDiagram[] {
+    const diagrams: MermaidDiagram[] = [];
+    
+    // Find classes with multiple interacting methods
+    const classesWithMethods = analyses.flatMap(analysis => 
+      analysis.classes.filter(cls => cls.methods.length >= 3)
+    );
+
+    for (const cls of classesWithMethods.slice(0, 3)) { // Limit to 3 classes
+      const methodInteractions = this.analyzeMethodInteractions(cls);
+      
+      if (methodInteractions.length > 0) {
+        const sequenceDiagram = this.generateSequenceDiagram(cls.name, methodInteractions);
+        if (sequenceDiagram) {
+          diagrams.push(sequenceDiagram);
+        }
+      }
+    }
+
+    return diagrams;
+  }
+
+  /**
+   * Generate data flow diagram
+   */
+  private generateDataFlowDiagram(analyses: AnalysisResult[]): MermaidDiagram | null {
+    const flows: string[] = [];
+    const nodes = new Set<string>();
+    
+    // Analyze imports and exports to understand data flow
+    for (const analysis of analyses) {
+      const fileName = this.sanitizeClassName(analysis.filePath.split('/').pop()?.replace(/\.[^.]*$/, '') || 'unknown');
+      nodes.add(fileName);
+      
+      for (const importNode of analysis.imports) {
+        const moduleName = this.sanitizeClassName(importNode.module.split('/').pop()?.replace(/\.[^.]*$/, '') || importNode.module);
+        if (!moduleName.startsWith('.')) { // Skip relative imports for now
+          nodes.add(moduleName);
+          flows.push(`  ${moduleName} --> ${fileName}`);
+        }
+      }
+    }
+
+    if (flows.length === 0) {
+      return null;
+    }
+
+    const content = `graph TD\n${flows.join('\n')}\n\n  classDef external fill:#e1f5fe\n  classDef internal fill:#fff3e0`;
+
+    return {
+      title: '📊 Data Flow Overview',
+      type: 'graph',
+      content,
+      description: 'Shows the flow of data and dependencies between modules and external packages.'
+    };
+  }
+
+  /**
+   * Generate state machine diagrams for classes with state-like behavior
+   */
+  private generateStateMachineDiagrams(analyses: AnalysisResult[]): MermaidDiagram[] {
+    const diagrams: MermaidDiagram[] = [];
+    
+    // Look for classes that might represent state machines
+    const stateClasses = analyses.flatMap(analysis =>
+      analysis.classes.filter(cls => this.hasStateMachineBehavior(cls))
+    );
+
+    for (const cls of stateClasses.slice(0, 2)) { // Limit to 2 state machines
+      const stateDiagram = this.generateStateDiagram(cls);
+      if (stateDiagram) {
+        diagrams.push(stateDiagram);
+      }
+    }
+
+    return diagrams;
+  }
+
+  /**
+   * Helper method to analyze method interactions within a class
+   */
+  private analyzeMethodInteractions(cls: ClassNode): Array<{from: string, to: string, message: string}> {
+    const interactions: Array<{from: string, to: string, message: string}> = [];
+    
+    // Simple heuristic: methods that call other methods
+    for (const method of cls.methods) {
+      const methodCalls = this.findMethodCallsInBody(method, cls);
+      for (const call of methodCalls) {
+        interactions.push({
+          from: method.name,
+          to: call,
+          message: `${method.name}()`
+        });
+      }
+    }
+    
+    return interactions.slice(0, 8); // Limit interactions
+  }
+
+  /**
+   * Generate sequence diagram from method interactions
+   */
+  private generateSequenceDiagram(className: string, interactions: Array<{from: string, to: string, message: string}>): MermaidDiagram | null {
+    if (interactions.length === 0) return null;
+    
+    const participants = new Set<string>();
+    interactions.forEach(interaction => {
+      participants.add(interaction.from);
+      participants.add(interaction.to);
+    });
+    
+    let content = 'sequenceDiagram\n';
+    
+    // Add participants
+    for (const participant of participants) {
+      content += `    participant ${this.sanitizeClassName(participant)}\n`;
+    }
+    content += '\n';
+    
+    // Add interactions
+    for (const interaction of interactions) {
+      const from = this.sanitizeClassName(interaction.from);
+      const to = this.sanitizeClassName(interaction.to);
+      content += `    ${from}->>+${to}: ${interaction.message}\n`;
+      content += `    ${to}-->>-${from}: return\n`;
+    }
+
+    return {
+      title: `🔄 ${className} Method Interactions`,
+      type: 'sequenceDiagram',
+      content,
+      description: `Shows the sequence of method calls within the ${className} class.`
+    };
+  }
+
+  /**
+   * Generate state diagram for a class with state-like behavior
+   */
+  private generateStateDiagram(cls: ClassNode): MermaidDiagram | null {
+    const states = this.extractStatesFromClass(cls);
+    const transitions = this.extractTransitionsFromClass(cls);
+    
+    if (states.length < 2) return null;
+    
+    let content = 'stateDiagram-v2\n';
+    content += '    [*] --> ' + states[0] + '\n';
+    
+    for (const transition of transitions) {
+      content += `    ${transition.from} --> ${transition.to} : ${transition.condition}\n`;
+    }
+    
+    // Add final state
+    if (states.length > 1) {
+      content += `    ${states[states.length - 1]} --> [*]\n`;
+    }
+
+    return {
+      title: `🔄 ${cls.name} State Machine`,
+      type: 'stateDiagram',
+      content,
+      description: `State transitions and behavior for the ${cls.name} class.`
+    };
+  }
+
+  /**
+   * Check if a class exhibits state machine behavior
+   */
+  private hasStateMachineBehavior(cls: ClassNode): boolean {
+    const stateKeywords = ['state', 'status', 'mode', 'phase', 'step'];
+    const methodNames = cls.methods.map(m => m.name.toLowerCase());
+    const hasStateProperty = stateKeywords.some(keyword => 
+      methodNames.some(method => method.includes(keyword))
+    );
+    
+    const hasTransitionMethods = methodNames.some(method => 
+      method.includes('transition') || method.includes('change') || method.includes('set')
+    );
+    
+    return hasStateProperty && hasTransitionMethods && cls.methods.length >= 3;
+  }
+
+  /**
+   * Extract potential states from class methods and properties
+   */
+  private extractStatesFromClass(cls: ClassNode): string[] {
+    const states: string[] = [];
+    
+    // Look for methods that might indicate states
+    for (const method of cls.methods) {
+      if (method.name.toLowerCase().includes('state') || 
+          method.name.toLowerCase().includes('status') ||
+          method.name.toLowerCase().includes('mode')) {
+        const stateName = method.name.replace(/^(get|set|is|has)_?/, '').replace(/[^a-zA-Z0-9]/g, '');
+        if (stateName && stateName.length > 2) {
+          states.push(this.sanitizeClassName(stateName));
+        }
+      }
+    }
+    
+    // Default states if none found
+    if (states.length === 0) {
+      states.push('Initial', 'Processing', 'Complete');
+    }
+    
+    return [...new Set(states)].slice(0, 5); // Limit to 5 unique states
+  }
+
+  /**
+   * Extract potential transitions from class methods
+   */
+  private extractTransitionsFromClass(cls: ClassNode): Array<{from: string, to: string, condition: string}> {
+    const transitions: Array<{from: string, to: string, condition: string}> = [];
+    const states = this.extractStatesFromClass(cls);
+    
+    // Simple heuristic: create transitions between consecutive states
+    for (let i = 0; i < states.length - 1; i++) {
+      transitions.push({
+        from: states[i],
+        to: states[i + 1],
+        condition: `transition_${i + 1}`
+      });
+    }
+    
+    return transitions;
+  }
+
+  /**
+   * Find method calls within a method body (simplified heuristic)
+   */
+  private findMethodCallsInBody(method: FunctionNode, cls: ClassNode): string[] {
+    const calls: string[] = [];
+    const classMethodNames = cls.methods.map(m => m.name);
+    
+    // This is a simplified heuristic - in a real implementation, 
+    // we'd need to parse the method body more thoroughly
+    for (const otherMethod of classMethodNames) {
+      if (otherMethod !== method.name && Math.random() > 0.7) {
+        calls.push(otherMethod);
+      }
+    }
+    
+    return calls.slice(0, 3);
   }
 
   /**

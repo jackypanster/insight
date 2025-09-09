@@ -46,7 +46,11 @@
     "docker:dev:rebuild": "./deploy/scripts/docker-dev.sh --rebuild",
     "docker:dev:bg": "./deploy/scripts/docker-dev.sh --background",
     "docker:build:prod": "./deploy/scripts/docker-build.sh --prod",
-    "docker:build:dev": "./deploy/scripts/docker-build.sh --dev"
+    "docker:build:dev": "./deploy/scripts/docker-build.sh --dev",
+    "analyze": "./insight-analyze.sh",
+    "analyze:quick": "./insight-analyze.sh --cleanup",
+    "analyze:verbose": "./insight-analyze.sh --verbose",
+    "analyze:help": "./insight-analyze.sh --help"
   },
   "keywords": [
     "documentation",
