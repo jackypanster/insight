@@ -1,11 +1,8 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
-
-# Production builds
-dist/
-build/
+.pnpm-store/
+.pnpm/
+~/.pnpm-cache/
 
 # Environment variables
 .env
@@ -14,27 +11,18 @@ build/
 .env.test.local
 .env.production.local
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
 # Cache directories
 .npm
-.eslintcache
 .cache/
+.eslintcache
 .parcel-cache
 .nyc_output
 .next/
 .nuxt/
 
-# PNPM cache directories
-.pnpm-store/
-.pnpm/
-~/.pnpm-cache/
-.pnpm-cache/
+# Version control
+.git/
+.gitignore
 
 # OS generated files
 .DS_Store
@@ -54,10 +42,24 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Testing
+# Testing and coverage
 coverage/
+.nyc_output
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Application specific
 .insight-cache/
 insight-docs/
 temp/
+
+# Documentation and examples (for production builds)
+docs/
+examples/
+*.md
+!README.md
