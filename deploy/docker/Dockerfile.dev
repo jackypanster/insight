@@ -1,7 +1,7 @@
-# Development environment with all tools included
-FROM node:20-bullseye
+# Stage 1: Base environment with system dependencies
+FROM node:20-bullseye AS base
 
-# Install system dependencies
+# Install system dependencies (cached layer)
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -14,37 +14,29 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf python3 /usr/bin/python
 
+# Install global Node.js tools (cached layer)
+RUN npm install -g pnpm@latest tsx@latest
+
 # Set working directory
 WORKDIR /app
 
-# Install global Node.js tools
-RUN npm install -g pnpm@latest tsx@latest
-
-# Create volumes for persistent data
-VOLUME ["/app/node_modules", "/root/.pnpm-store"]
-
-# Set environment variables for development
+# Set environment variables
 ENV NODE_ENV=development
 ENV PNPM_HOME="/usr/local/bin"
 ENV PATH="$PNPM_HOME:$PATH"
 
+# Stage 2: Development environment with application code
+FROM base AS development
+
+# Create volumes for persistent data
+VOLUME ["/app/node_modules", "/root/.pnpm-store"]
+
 # Expose ports
 EXPOSE 3000 9229
 
-# Create a startup script for development
-RUN echo '#!/bin/bash\n\
-echo "🐳 Starting Insight development environment..."\n\
-echo "📦 Installing dependencies..."\n\
-pnpm install\n\
-echo "✅ Dependencies installed"\n\
-echo "🚀 Starting development server..."\n\
-echo "   - Web server: http://localhost:3000"\n\
-echo "   - Debug port: 9229"\n\
-echo "   - Hot reload: enabled"\n\
-echo ""\n\
-echo "Starting web server with sample documentation..."\n\
-exec tsx src/cli/index.ts serve --port 3000 --host 0.0.0.0 --docs-dir examples' > /usr/local/bin/dev-start && \
-    chmod +x /usr/local/bin/dev-start
+# Copy startup script (this layer rebuilds when script changes)
+COPY deploy/docker/dev-start.sh /usr/local/bin/dev-start
+RUN chmod +x /usr/local/bin/dev-start
 
 # Default command for development
-CMD ["dev-start"]
+CMD ["/usr/local/bin/dev-start"]
