@@ -3,6 +3,7 @@ import path from 'path';
 import Handlebars from 'handlebars';
 import { logger } from '@/utils/logger.js';
 import { MermaidGenerator, type MermaidDiagram } from '../diagrams/MermaidGenerator.js';
+import { OpenRouterService } from '../llm/OpenRouterService.js';
 import type { InsightConfig } from '@/types/index.js';
 import type { ScanResult } from '../scanner/FileScanner.js';
 import type { AnalysisResult } from '../analyzer/ASTAnalyzer.js';
@@ -11,6 +12,7 @@ import type { LLMAnalysis, DocumentationChunk } from '../llm/OpenRouterService.j
 export interface ProjectDocumentation {
   overview: string;
   architecture: string;
+  userGuide: string;
   files: FileDocumentation[];
   statistics: ProjectStatistics;
   diagrams: MermaidDiagram[];
@@ -86,12 +88,22 @@ export interface ProjectStatistics {
   averageComplexity: number;
 }
 
+/**
+ * Interface for function grouping
+ */
+interface FunctionGroup {
+  category: string;
+  functions: string[];
+}
+
 export class DocumentationGenerator {
   private config: InsightConfig;
   private templates: Record<string, HandlebarsTemplateDelegate> = {};
+  private llmService: OpenRouterService;
 
-  constructor(config: InsightConfig) {
+  constructor(config: InsightConfig, llmService?: OpenRouterService) {
     this.config = config;
+    this.llmService = llmService || new OpenRouterService(config.llm);
     this.initializeTemplates();
   }
 
@@ -120,10 +132,15 @@ export class DocumentationGenerator {
       
       // Enhanced architecture with diagrams
       const architecture = this.generateArchitectureWithDiagrams(fileDocumentations, statistics, diagrams);
+      
+      // Generate User Guide with storytelling approach
+      logger.info('Generating user-friendly project guide...');
+      const userGuide = await this.generateUserGuide(fileDocumentations, statistics, analyses);
 
       const documentation: ProjectDocumentation = {
         overview,
         architecture,
+        userGuide,
         files: fileDocumentations,
         statistics,
         diagrams,
@@ -485,6 +502,11 @@ ${this.generateArchitectureRecommendations(files, statistics).map(rec => `- ${re
     const archPath = path.join(outputDir, 'ARCHITECTURE.md');
     await fs.writeFile(archPath, documentation.architecture);
 
+    // Write user-friendly guide (the core business value feature)
+    const userGuidePath = path.join(outputDir, 'USERGUIDE.md');
+    await fs.writeFile(userGuidePath, documentation.userGuide);
+    logger.info('UserGuide.md generated successfully');
+
     // Write individual file documentation
     const filesDir = path.join(outputDir, 'files');
     await fs.ensureDir(filesDir);
@@ -726,6 +748,383 @@ ${fileDoc.recommendations.map(rec => `- ${rec}`).join('\n')}
     }
     
     return recommendations;
+  }
+
+  // ========== UserGuide Generation - Core Business Value Feature ==========
+  
+  /**
+   * Infer file purpose based on filename and content
+   */
+  private inferFilePurpose(filename: string, file: FileDocumentation): string {
+    const lowerFilename = filename.toLowerCase();
+    const hasClasses = file.classes.length > 0;
+    const functionNames = file.functions.map(f => f.name.toLowerCase());
+    
+    // Special files
+    if (filename === '__init__.py') return '包初始化文件';
+    if (filename === 'setup.py') return '项目安装配置';
+    if (lowerFilename.includes('main')) return '程序入口文件';
+    if (lowerFilename.includes('config')) return '配置管理';
+    if (lowerFilename.includes('test')) return '测试文件';
+    if (lowerFilename.includes('util') || lowerFilename.includes('helper')) return '工具函数集';
+    
+    // Analyze by function patterns
+    const backupFunctions = functionNames.filter(fn => fn.includes('backup') || fn.includes('save')).length;
+    const fetchFunctions = functionNames.filter(fn => fn.includes('fetch') || fn.includes('get') || fn.includes('retrieve')).length;
+    const processFunctions = functionNames.filter(fn => fn.includes('process') || fn.includes('handle')).length;
+    
+    if (backupFunctions > 2) return '数据备份处理模块';
+    if (fetchFunctions > 2) return '数据获取模块';
+    if (processFunctions > 2) return '数据处理模块';
+    if (hasClasses && file.functions.length > 10) return '核心功能模块';
+    if (file.functions.length > 5) return '功能实现模块';
+    
+    return '辅助功能模块';
+  }
+  
+  /**
+   * Infer import purpose based on library name
+   */
+  private inferImportPurpose(importName: string): string {
+    const lowerName = importName.toLowerCase();
+    
+    // Network and web
+    if (lowerName.includes('urllib') || lowerName.includes('requests')) return '网络请求处理';
+    if (lowerName.includes('http')) return 'HTTP通信';
+    if (lowerName.includes('ssl') || lowerName.includes('certifi')) return 'SSL安全连接';
+    
+    // Data processing
+    if (lowerName.includes('json')) return 'JSON数据处理';
+    if (lowerName.includes('pandas')) return '数据分析处理';
+    if (lowerName.includes('numpy')) return '数值计算';
+    if (lowerName.includes('csv')) return 'CSV文件处理';
+    
+    // System and files
+    if (lowerName.includes('os') || lowerName.includes('path')) return '操作系统交互';
+    if (lowerName.includes('subprocess')) return '子进程调用';
+    if (lowerName.includes('argparse')) return '命令行参数解析';
+    if (lowerName.includes('logging')) return '日志记录';
+    
+    // Database
+    if (lowerName.includes('sql') || lowerName.includes('database')) return '数据库操作';
+    
+    // Testing
+    if (lowerName.includes('test') || lowerName.includes('mock')) return '测试框架';
+    
+    // Web frameworks
+    if (lowerName.includes('flask')) return 'Flask Web框架';
+    if (lowerName.includes('django')) return 'Django Web框架';
+    if (lowerName.includes('fastapi')) return 'FastAPI 框架';
+    
+    // Time and date
+    if (lowerName.includes('time') || lowerName.includes('date')) return '时间日期处理';
+    
+    // Default
+    return '功能支持库';
+  }
+
+  /**
+   * Intelligent function grouping based on naming patterns
+   */
+  private groupFunctionsByPattern(files: FileDocumentation[]): FunctionGroup[] {
+    const allFunctions = files.flatMap(f => f.functions.map(fn => fn.name));
+    
+    const groups: Record<string, string[]> = {
+      '备份相关功能': [],
+      '数据获取功能': [], 
+      '数据处理功能': [],
+      '文件操作功能': [],
+      '网络请求功能': [],
+      '验证检查功能': [],
+      '配置管理功能': [],
+      '工具辅助功能': []
+    };
+    
+    allFunctions.forEach(fn => {
+      const lowerName = fn.toLowerCase();
+      
+      if (lowerName.includes('backup') || lowerName.includes('save') || lowerName.includes('store')) {
+        groups['备份相关功能'].push(fn);
+      } else if (lowerName.includes('fetch') || lowerName.includes('get') || lowerName.includes('retrieve') || lowerName.includes('load')) {
+        groups['数据获取功能'].push(fn);
+      } else if (lowerName.includes('process') || lowerName.includes('handle') || lowerName.includes('parse') || lowerName.includes('analyze')) {
+        groups['数据处理功能'].push(fn);
+      } else if (lowerName.includes('download') || lowerName.includes('upload') || lowerName.includes('file') || lowerName.includes('read') || lowerName.includes('write')) {
+        groups['文件操作功能'].push(fn);
+      } else if (lowerName.includes('request') || lowerName.includes('http') || lowerName.includes('api') || lowerName.includes('url')) {
+        groups['网络请求功能'].push(fn);
+      } else if (lowerName.includes('check') || lowerName.includes('valid') || lowerName.includes('test') || lowerName.includes('verify')) {
+        groups['验证检查功能'].push(fn);
+      } else if (lowerName.includes('config') || lowerName.includes('setting') || lowerName.includes('option') || lowerName.includes('init')) {
+        groups['配置管理功能'].push(fn);
+      } else {
+        groups['工具辅助功能'].push(fn);
+      }
+    });
+    
+    // Convert to array and filter out empty groups
+    return Object.entries(groups)
+      .filter(([_, functions]) => functions.length > 0)
+      .map(([category, functions]) => ({ category, functions }));
+  }
+  
+  /**
+   * Generate user-friendly project guide with storytelling approach for Chinese developers
+   */
+  private async generateUserGuide(
+    fileDocumentations: FileDocumentation[],
+    projectStats: ProjectStatistics,
+    analyses: AnalysisResult[]
+  ): Promise<string> {
+    try {
+      const prompt = this.createUserGuidePrompt(fileDocumentations, projectStats, analyses);
+      const userGuide = await this.llmService.generateContent(prompt, {
+        type: 'userguide',
+        totalFiles: projectStats.totalFiles,
+        totalLines: projectStats.totalLines,
+        languages: Object.keys(projectStats.languageBreakdown),
+      });
+      
+      return userGuide;
+    } catch (error) {
+      logger.error('Failed to generate UserGuide with LLM, using fallback:', error);
+      return this.generateFallbackUserGuide(fileDocumentations, projectStats);
+    }
+  }
+
+  /**
+   * Create high-quality storytelling prompt for Chinese developers with actual code details
+   */
+  private createUserGuidePrompt(
+    files: FileDocumentation[],
+    stats: ProjectStatistics,
+    analyses: AnalysisResult[]
+  ): string {
+    // Extract comprehensive code structure information
+    const frameworks = this.detectFrameworks(files);
+    const patterns = this.identifyArchitecturalPatterns(files);
+    const dependencies = this.analyzeDependencies(files);
+    const codeInsights = this.extractCodeInsights(files, analyses);
+    
+    // NEW: Extract detailed code structure
+    const allClasses = files.flatMap(f => f.classes);
+    const functionGroups = this.groupFunctionsByPattern(files);
+    const allImports = files.flatMap(f => f.imports);
+    
+    // NEW: Analyze file purposes based on names and content
+    const fileAnalysis = files.map(f => {
+      const filename = path.basename(f.filePath);
+      const purpose = this.inferFilePurpose(filename, f);
+      return `- **${filename}**: ${purpose} (${f.functions.length}个函数, ${f.classes.length}个类)`;
+    }).join('\n');
+
+    return `作为一名资深架构师，请根据以下详细的代码分析结果，用讲故事的方式为中国开发者生成一份项目指南。
+
+## 🔍 项目分析数据
+
+### 基本统计
+- **文件数量**: ${stats.totalFiles}
+- **代码行数**: ${stats.totalLines}
+- **函数数量**: ${stats.totalFunctions}  
+- **类数量**: ${stats.totalClasses}
+- **平均复杂度**: ${stats.averageComplexity}
+- **主要语言**: ${Object.entries(stats.languageBreakdown).map(([lang, count]) => `${lang}(${count}个文件)`).join(', ')}
+
+### 📁 文件结构分析
+${fileAnalysis}
+
+### 🏗️ 发现的类 (${allClasses.length}个)
+${allClasses.length > 0 ? allClasses.map(cls => 
+  `- **${cls.name}**: ${cls.description || '类定义'}\n  ${cls.inheritance.length > 0 ? `继承自: ${cls.inheritance.join(', ')}\n  ` : ''}包含 ${cls.methods.length} 个方法: ${cls.methods.slice(0, 3).map(m => m.name).join(', ')}${cls.methods.length > 3 ? '...' : ''}`
+).join('\n') : '- 未发现类定义'}
+
+### ⚙️ 核心函数分组 (共${stats.totalFunctions}个)
+${functionGroups.map(group => 
+  `**${group.category} (${group.functions.length}个):**\n${group.functions.slice(0, 5).map(fn => `  - ${fn}`).join('\n')}${group.functions.length > 5 ? `\n  - ... 等${group.functions.length - 5}个函数` : ''}`
+).join('\n\n')}
+
+### 📦 主要依赖分析 (${allImports.length}个导入)
+${dependencies.external.length > 0 ? dependencies.external.slice(0, 10).map(dep => {
+  // Analyze what each import suggests about functionality
+  const purpose = this.inferImportPurpose(dep);
+  return `- **${dep}**: ${purpose}`;
+}).join('\n') : '- 无外部依赖'}
+${dependencies.external.length > 10 ? `\n- ... 等其他 ${dependencies.external.length - 10} 个依赖` : ''}
+
+### 🔍 技术架构洞察
+- **检测到的框架**: ${frameworks.length > 0 ? frameworks.map(f => f.type).join(', ') : '无特定框架'}
+- **架构模式**: ${patterns.join(', ')}
+- **代码复杂度**: ${stats.complexityDistribution.high > 0 ? '包含高复杂度模块' : '整体复杂度适中'}
+
+## 📝 生成要求
+
+**重要提醒**：请仔细分析上述具体的代码结构信息，根据实际的函数名、类名、依赖库推断项目的真实功能！
+
+**推断指导**：
+- 如果看到 backup_*, save_* 等函数 → 这是备份/保存工具
+- 如果看到 fetch_*, get_*, retrieve_* 等函数 → 这是数据获取工具  
+- 如果看到 http, urllib, requests 等库 → 涉及网络通信
+- 如果看到 argparse, logging 等库 → 这是命令行工具
+- 如果看到 pandas, numpy 等库 → 这是数据分析工具
+
+请生成一份包含以下部分的 **USERGUIDE.md**，使用地道的中文表达，技术术语保留英文：
+
+# 🚀 项目指南
+
+## 📖 项目故事
+**基于实际代码分析**，用人类视角讲述这个项目：
+- 根据函数名和依赖库，这个项目解决什么实际问题？
+- 为什么选择这些技术栈和库？
+- 什么样的用户会使用这个工具？
+- 项目的核心价值是什么？
+
+## 🎯 应用场景
+**基于发现的功能模块**，描述具体的使用案例：
+- 主要应用场景（结合实际函数功能）
+- 典型工作流程（参考函数调用链）
+- 解决的实际痛点
+- 与同类产品的差异化优势
+
+## 🛠️ 技术架构
+**基于实际代码结构**，用通俗语言解释：
+- 核心模块和作用（参考文件分析和函数分组）
+- 设计模式和选择理由
+- 架构亮点和创新点
+- 技术栈选择的考量（参考实际依赖）
+
+## 📦 快速开始
+**基于实际项目特点**：
+- 环境要求和依赖（参考实际导入的库）
+- 安装步骤（详细但简洁）
+- 第一个运行例子（基于主要功能）
+- 常见问题和解决方案
+
+## 💡 核心洞察
+基于代码分析的发现：
+- 代码质量评价（客观事实）
+- 架构优势分析
+- 可能的改进方向
+- 最佳实践建议
+- 开发者注意事项
+
+## 🎨 开发指南
+实用的开发建议：
+- 代码规范和风格
+- 推荐的开发工具
+- 测试策略
+- 部署注意事项
+
+---
+
+**关键要求**:
+1. **基于实际代码生成**：绝对不要使用通用模板，必须根据上述具体的函数名、类名、导入库来推断和描述项目功能
+2. **准确性第一**：如果代码显示这是备份工具，就说备份工具；如果是数据分析，就说数据分析；如果是Web服务，就说Web服务
+3. **人性化表达**：避免机器翻译式的中文，使用自然、专业的表达
+4. **实用导向**：每个部分都要对开发者有实际价值
+5. **保持客观**：基于真实分析数据，不夸大不虚假
+
+请确保生成的内容准确反映被分析项目的实际功能和特点！`;
+  }
+
+  /**
+   * Extract meaningful code insights from analysis results
+   */
+  private extractCodeInsights(files: FileDocumentation[], analyses: AnalysisResult[]): string[] {
+    const insights: string[] = [];
+    
+    // Complexity insights
+    const complexFiles = files.filter(f => f.complexity > 10);
+    if (complexFiles.length > 0) {
+      insights.push(`发现 ${complexFiles.length} 个高复杂度文件，可能需要重构优化`);
+    }
+    
+    // Class structure insights
+    const largeClasses = files.flatMap(f => f.classes.filter(c => c.methods.length > 8));
+    if (largeClasses.length > 0) {
+      insights.push(`检测到 ${largeClasses.length} 个大型类，平均方法数较多`);
+    }
+    
+    // Function insights
+    const asyncFunctions = files.flatMap(f => f.functions.filter(fn => fn.isAsync));
+    if (asyncFunctions.length > 0) {
+      insights.push(`使用现代异步编程模式，包含 ${asyncFunctions.length} 个异步函数`);
+    }
+    
+    // Import patterns
+    const totalImports = files.reduce((sum, f) => sum + f.imports.length, 0);
+    if (totalImports > 0) {
+      insights.push(`模块化程度较好，平均每个文件引入 ${Math.round(totalImports / files.length)} 个依赖`);
+    }
+    
+    // Documentation insights  
+    const documentedFunctions = files.flatMap(f => f.functions.filter(fn => fn.description && fn.description.length > 20));
+    const totalFunctions = files.reduce((sum, f) => sum + f.functions.length, 0);
+    if (totalFunctions > 0) {
+      const docRate = Math.round((documentedFunctions.length / totalFunctions) * 100);
+      insights.push(`文档覆盖率约 ${docRate}%，${docRate > 50 ? '文档较为完整' : '建议增加函数文档'}`);
+    }
+    
+    return insights.length > 0 ? insights : ['代码结构清晰，遵循良好的开发规范'];
+  }
+
+  /**
+   * Generate fallback UserGuide when LLM fails
+   */
+  private generateFallbackUserGuide(
+    files: FileDocumentation[],
+    stats: ProjectStatistics
+  ): string {
+    const frameworks = this.detectFrameworks(files);
+    const mainLanguage = Object.entries(stats.languageBreakdown)[0]?.[0] || 'unknown';
+    
+    return `# 🚀 项目指南
+
+## 📖 项目概览
+
+这是一个基于 ${mainLanguage} 的项目，包含 ${stats.totalFiles} 个文件，共 ${stats.totalLines} 行代码。
+
+### 基本信息
+- **文件数量**: ${stats.totalFiles}
+- **代码行数**: ${stats.totalLines}
+- **函数数量**: ${stats.totalFunctions}
+- **类数量**: ${stats.totalClasses}
+- **平均复杂度**: ${stats.averageComplexity}
+
+## 🎯 应用场景
+
+基于代码分析，这个项目主要用于：
+${frameworks.length > 0 
+  ? frameworks.map(f => `- **${f.type}** 相关应用: ${f.description}`).join('\n')
+  : '- 通用软件开发应用'
+}
+
+## 🛠️ 技术架构
+
+### 主要组成部分
+${files.map(f => {
+  const fileName = path.basename(f.filePath);
+  const fileType = this.classifyFileType(f);
+  return `- **${fileName}** (${fileType}): ${f.classes.length} 个类, ${f.functions.length} 个函数`;
+}).join('\n')}
+
+## 📦 快速开始
+
+1. **环境准备**
+   - 确保已安装 ${mainLanguage} 运行环境
+   - 检查项目依赖
+
+2. **项目结构**
+   - 主要代码位于根目录
+   - ${stats.complexityDistribution.high > 0 ? '注意：项目包含高复杂度文件，建议仔细阅读' : '代码结构相对简单'}
+
+## 💡 核心洞察
+
+- **代码复杂度**: ${stats.complexityDistribution.high > 0 ? '存在高复杂度模块' : '整体复杂度适中'}
+- **架构模式**: ${this.identifyArchitecturalPatterns(files).join(', ') || '标准结构'}
+- **开发建议**: 建议添加更多文档和测试用例
+
+---
+*注：由于网络或配置问题，此文档由分析工具自动生成。建议检查API配置以获得更详细的项目说明。*`;
   }
 
   // Get generation statistics
