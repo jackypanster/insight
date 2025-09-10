@@ -250,7 +250,7 @@ class SimpleWebServer {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title} - Insight Documentation</title>
+    <title>${title} - Source Code Analysis</title>
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
         body {
@@ -349,15 +349,10 @@ class SimpleWebServer {
 <body>
     <div class="container">
         <div class="header">
-            <h1>📚 Insight Documentation (Viewer)</h1>
-            <p>Lightweight Documentation Server</p>
+            <h1>📊 Source Code Analysis Report</h1>
+            <p>AI-powered Code Analysis & Documentation</p>
         </div>
         
-        <div class="nav">
-            <a href="/api/docs">📋 API Structure</a>
-            <a href="/api/health">🔍 Health Check</a>
-            <a href="https://github.com/jackypanster/insight" target="_blank">🚀 GitHub</a>
-        </div>
         
         <div class="content">
             <pre style="white-space: pre-wrap; font-family: inherit; background: transparent; border: none; padding: 0;">${this.processMermaidBlocks(markdown)}</pre>

@@ -71,7 +71,7 @@ show_help() {
 
 # 默认值
 DOCS_DIR="./insight-docs"
-WEB_PORT="3000"
+WEB_PORT="3001"
 OPEN_BROWSER="true"
 CLEANUP_CONTAINER="false"
 VERBOSE="false"
