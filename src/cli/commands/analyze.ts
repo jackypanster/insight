@@ -225,7 +225,7 @@ export function createAnalyzeCommand(): Command {
         // Step 4: Generate documentation files
         spinner.start('📄 Writing documentation files...');
         const genStartTime = Date.now();
-        const generator = new DocumentationGenerator(config);
+        const generator = new DocumentationGenerator(config, llmService);
         const documentation = await generator.generate(
           scanResult,
           analyses,
