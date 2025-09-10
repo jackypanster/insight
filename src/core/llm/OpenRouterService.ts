@@ -376,6 +376,79 @@ Format your response as structured markdown with clear sections and subsections.
     };
   }
 
+  // Generate content using custom prompts - for UserGuide and other flexible use cases
+  async generateContent(prompt: string, context?: Record<string, any>): Promise<string> {
+    const startTime = Date.now();
+    logger.info('Generating custom content with LLM');
+
+    // Generate cache key from prompt and context
+    const cacheKey = this.cache.generateKey(prompt, {
+      model: this.config.models.primary,
+      type: 'content-generation',
+      contextHash: context ? JSON.stringify(context) : 'no-context',
+    });
+
+    // Check cache first
+    const cached = await this.cache.get<string>(cacheKey);
+    if (cached) {
+      logger.info('Using cached content generation result');
+      return cached;
+    }
+
+    try {
+      // Rate limiting
+      await this.enforceRateLimit();
+
+      const response = await this.makeRequest(prompt, {
+        model: this.config.models.primary,
+        temperature: this.config.temperature,
+        max_tokens: this.config.maxTokens,
+      });
+
+      // Cache the successful response
+      await this.cache.set(cacheKey, response, 86400); // Cache for 24 hours
+      
+      const duration = Date.now() - startTime;
+      logger.info(`Content generation completed: ${duration}ms`);
+      
+      return response;
+    } catch (error) {
+      logger.error('Content generation failed:', error);
+      
+      // Try fallback model if primary fails
+      if (this.config.models.fallback) {
+        logger.info(`Trying fallback model for content generation: ${this.config.models.fallback}`);
+        return this.generateContentWithFallback(prompt, context);
+      }
+      
+      throw error;
+    }
+  }
+
+  private async generateContentWithFallback(prompt: string, context?: Record<string, any>): Promise<string> {
+    try {
+      const response = await this.makeRequest(prompt, {
+        model: this.config.models.fallback!,
+        temperature: this.config.temperature,
+        max_tokens: Math.min(this.config.maxTokens, 2048), // Fallback models often have lower limits
+      });
+
+      return response;
+    } catch (error) {
+      logger.error('Fallback model also failed for content generation:', error);
+      
+      // Return a basic fallback message
+      return `# 项目指南
+
+生成失败，请检查网络连接和API配置。
+
+## 基本信息
+${context ? `项目包含 ${JSON.stringify(context).substring(0, 100)}...` : '无法获取项目信息'}
+
+请稍后重试或联系技术支持。`;
+    }
+  }
+
   // Test API connection
   async testConnection(): Promise<boolean> {
     try {

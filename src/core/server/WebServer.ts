@@ -129,16 +129,21 @@ export class WebServer {
     // Catch-all route for SPA-style routing
     this.app.get('*', async (req: Request, res: Response) => {
       try {
-        // Try to serve index.html if it exists, otherwise fallback to README.md
+        // Priority order: index.html → USERGUIDE.md → README.md
         const indexPath = path.join(this.options.docsDir, 'index.html');
+        const userGuidePath = path.join(this.options.docsDir, 'USERGUIDE.md');
         const readmePath = path.join(this.options.docsDir, 'README.md');
         
         if (await fs.pathExists(indexPath)) {
           res.sendFile(indexPath);
+        } else if (await fs.pathExists(userGuidePath)) {
+          const content = await fs.readFile(userGuidePath, 'utf-8');
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.send(this.wrapMarkdownInHTML(content, '🚀 项目指南'));
         } else if (await fs.pathExists(readmePath)) {
           const content = await fs.readFile(readmePath, 'utf-8');
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
-          res.send(this.wrapMarkdownInHTML(content, 'Documentation'));
+          res.send(this.wrapMarkdownInHTML(content, '📊 技术概览'));
         } else {
           res.status(404).send(this.create404Page());
         }
@@ -344,6 +349,10 @@ export class WebServer {
         <div class="header">
             <h1>📊 Source Code Analysis Report</h1>
             <p>AI-powered Code Analysis & Documentation</p>
+        </div>
+        
+        <div class="nav">
+            <a href="/ARCHITECTURE.md">🏗️ Architecture & Diagrams</a>
         </div>
         
         
