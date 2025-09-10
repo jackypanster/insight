@@ -137,15 +137,21 @@ class SimpleWebServer {
     // Catch-all route for main page
     this.app.get('*', async (req, res) => {
       try {
+        // Priority order: index.html → USERGUIDE.md → README.md
         const indexPath = path.join(this.options.docsDir, 'index.html');
+        const userGuidePath = path.join(this.options.docsDir, 'USERGUIDE.md');
         const readmePath = path.join(this.options.docsDir, 'README.md');
         
         if (await fs.pathExists(indexPath)) {
           res.sendFile(indexPath);
+        } else if (await fs.pathExists(userGuidePath)) {
+          const content = await fs.readFile(userGuidePath, 'utf-8');
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.send(this.wrapMarkdownInHTML(content, '🚀 项目指南'));
         } else if (await fs.pathExists(readmePath)) {
           const content = await fs.readFile(readmePath, 'utf-8');
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
-          res.send(this.wrapMarkdownInHTML(content, 'Documentation'));
+          res.send(this.wrapMarkdownInHTML(content, '📊 技术概览'));
         } else {
           res.status(404).send(this.create404Page());
         }
@@ -250,7 +256,7 @@ class SimpleWebServer {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title} - Insight Documentation</title>
+    <title>${title} - Source Code Analysis</title>
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
         body {
@@ -349,15 +355,16 @@ class SimpleWebServer {
 <body>
     <div class="container">
         <div class="header">
-            <h1>📚 Insight Documentation (Viewer)</h1>
-            <p>Lightweight Documentation Server</p>
+            <h1>📊 Source Code Analysis Report</h1>
+            <p>AI-powered Code Analysis & Documentation</p>
         </div>
         
         <div class="nav">
-            <a href="/api/docs">📋 API Structure</a>
-            <a href="/api/health">🔍 Health Check</a>
-            <a href="https://github.com/jackypanster/insight" target="_blank">🚀 GitHub</a>
+            <a href="/USERGUIDE.md">🚀 项目指南</a>
+            <a href="/README.md">📊 技术概览</a>
+            <a href="/ARCHITECTURE.md">🏗️ Architecture & Diagrams</a>
         </div>
+        
         
         <div class="content">
             <pre style="white-space: pre-wrap; font-family: inherit; background: transparent; border: none; padding: 0;">${this.processMermaidBlocks(markdown)}</pre>
@@ -518,7 +525,7 @@ class SimpleWebServer {
   }
 
   processMermaidBlocks(markdown) {
-    const mermaidRegex = /```(?:mermaid|mer)\\s*\\n([\\s\\S]*?)\\n```/gi;
+    const mermaidRegex = /```(?:mermaid|mer)\s*\n([\s\S]*?)\n```/gi;
     let diagramIndex = 0;
     
     const processed = markdown.replace(mermaidRegex, (match, diagramContent) => {

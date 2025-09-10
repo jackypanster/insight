@@ -220,13 +220,14 @@ ${relevantEdges.join('\n')}`;
       for (const file of files) {
         const nodeName = `node${nodeId++}`;
         const fileName = file.filePath.split('/').pop() || 'unknown';
+        const displayName = this.getComponentDisplayName(fileName, file);
         
-        nodes.push(`  ${nodeName}["${fileName}\\n(${file.classes.length}C, ${file.functions.length}F)"]`);
+        nodes.push(`  ${nodeName}["${displayName}<br/>(${file.classes.length}C, ${file.functions.length}F)"]`);
         layerNodes[layerName].push(nodeName);
 
         // Add complexity styling
         if (file.complexity > 10) {
-          nodes.push(`  ${nodeName} --> ${nodeName} : high complexity`);
+          nodes.push(`  ${nodeName}:::highComplexity`);
         }
       }
     }
@@ -244,7 +245,9 @@ ${relevantEdges.join('\n')}`;
 
     const content = `flowchart TB
 ${nodes.join('\n')}
-${edges.join('\n')}`;
+${edges.join('\n')}
+
+  classDef highComplexity fill:#ffebee,stroke:#d32f2f,stroke-width:2px,color:#000`;
 
     return {
       title: 'Architecture Overview',
@@ -637,5 +640,56 @@ ${methods.map(method => `    ${method}`).join('\n')}
     }
 
     return markdown;
+  }
+
+  /**
+   * Get a more meaningful display name for a component
+   */
+  private getComponentDisplayName(fileName: string, file: FileDocumentation): string {
+    // Remove file extension
+    const baseName = fileName.replace(/\.(py|js|ts|tsx|jsx)$/, '');
+    
+    // Handle special cases
+    if (baseName === '__init__') {
+      return 'Package Init';
+    }
+    
+    if (baseName === 'setup') {
+      return 'Package Setup';
+    }
+    
+    if (baseName.includes('main') || baseName.includes('index')) {
+      return 'Main Entry';
+    }
+    
+    if (baseName.includes('config') || baseName.includes('settings')) {
+      return 'Configuration';
+    }
+    
+    if (baseName.includes('test')) {
+      return `Test: ${baseName.replace(/test_?/i, '')}`;
+    }
+    
+    if (baseName.includes('util') || baseName.includes('helper')) {
+      return `Utilities: ${baseName}`;
+    }
+    
+    // For complex files, try to infer purpose from classes/functions
+    if (file.classes.length > 0) {
+      const mainClass = file.classes[0].name;
+      return `${mainClass} Module`;
+    }
+    
+    // If it's a Python module with many functions, it's likely a service/library
+    if (file.functions.length > 10) {
+      return `${this.capitalize(baseName)} Service`;
+    }
+    
+    // Default: capitalize the base name
+    return this.capitalize(baseName);
+  }
+  
+  private capitalize(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
   }
 }
