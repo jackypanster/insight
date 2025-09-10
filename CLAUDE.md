@@ -57,11 +57,51 @@ cp .env.example .env
 ### Development
 ```bash
 pnpm dev             # Development mode (tsx)
+pnpm dev:serve       # Start development server on port 3000
 pnpm build           # Build TypeScript
 pnpm test            # Run test suite with Vitest
 pnpm lint            # ESLint checks
 pnpm format          # Prettier formatting
 pnpm type-check      # TypeScript validation
+```
+
+### Advanced Development Commands
+```bash
+# Testing commands
+pnpm test:watch                                # Watch mode for development
+pnpm test:ui                                   # Visual test runner interface
+pnpm test:coverage                            # Generate coverage report
+pnpm test:coverage:open                       # Generate and view coverage report
+pnpm test:unit                                # Unit tests only
+pnpm test:integration                         # Integration tests only
+pnpm test:edge                                # Edge case tests only
+pnpm test:serve                               # Test web server functionality
+pnpm test:debug                               # Verbose output without coverage
+pnpm test:ci                                  # Full CI suite with coverage
+
+# Single test execution (for debugging specific issues)
+pnpm vitest run tests/unit/analyzer.test.ts   # Run specific test file
+pnpm vitest run tests/integration/full-pipeline.test.ts --reporter=verbose
+
+# Quality assurance
+pnpm quality         # Full quality check (lint + type + test + coverage)
+pnpm quality:fix     # Auto-fix issues where possible
+pnpm precommit       # Pre-commit checks (lint + format + type + unit tests)
+
+# Docker development
+pnpm docker:dev                               # Start development container
+pnpm docker:dev:rebuild                       # Rebuild and start development container
+pnpm docker:dev:bg                           # Start container in background
+pnpm docker:build                            # Build production image
+pnpm docker:build:dev                        # Build development image
+pnpm docker:test                             # Run tests in container
+pnpm docker:clean                            # Clean Docker resources
+
+# Analysis helpers (using project scripts)
+pnpm analyze                                 # Quick analysis using helper script
+pnpm analyze:quick                           # Analysis with cleanup
+pnpm analyze:verbose                         # Detailed analysis output
+pnpm analyze:help                            # Show analysis script help
 ```
 
 ### CLI Usage (Current and Planned)
@@ -109,6 +149,28 @@ insight/
 ├── examples/             # Example Python projects for testing
 └── scripts/              # Development and build scripts
 ```
+
+## TypeScript Configuration
+
+### Path Aliases
+The project uses TypeScript path aliases for clean imports. These are configured in `tsconfig.json` and `vitest.config.ts`:
+
+```typescript
+// Import examples using path aliases:
+import { logger } from '@/utils/logger.js';
+import { ASTAnalyzer } from '@/core/analyzer/ASTAnalyzer.js';
+import { CacheManager } from '@/services/cache/CacheManager.js';
+import { AnalysisConfig } from '@/types/index.js';
+
+// Path mappings:
+@/cli       -> src/cli
+@/core      -> src/core  
+@/services  -> src/services
+@/utils     -> src/utils
+@/types     -> src/types
+```
+
+**Note**: When creating new files, always use these path aliases instead of relative imports for consistency.
 
 ## Test Repositories for MVP
 
@@ -284,6 +346,29 @@ INSIGHT_MAX_WORKERS=4           # Concurrent processing
 - 🎯 CI/CD quality gates and automated testing
 - 🛡️ Error handling and resilience testing
 
+#### Testing Architecture Details
+**3-Tier Testing Strategy**:
+- **Unit Tests** (`tests/unit/`): Individual component testing with 80%+ coverage requirements
+- **Integration Tests** (`tests/integration/`): Full pipeline and component interaction testing
+- **Edge Cases** (`tests/edge-cases/`): Real-world error scenarios and boundary conditions
+
+**Coverage Thresholds**:
+- **Global Requirements**: 80% statements, 75% branches, 80% functions, 80% lines
+- **Critical Modules**: ErrorCollector (90% statements), ASTAnalyzer (85% statements)
+- **Coverage Tools**: V8 provider with HTML, JSON, LCOV, and text reporting
+
+**Error Resilience Testing**:
+- **6 Error Categories**: Syntax, encoding, timeout, memory, file access, parsing errors
+- **Error Modes**: Continue-on-error vs stop-on-error behavior validation
+- **Performance Limits**: 30s timeout protection, 10MB file size limits
+- **Real-World Fixtures**: Unicode issues, malformed code, large files, circular imports
+
+**Test Infrastructure Features**:
+- **Parallel Execution**: Multi-threaded with 1-4 worker threads
+- **CI Integration**: GitHub Actions with multi-platform testing (Ubuntu, Windows, macOS)
+- **Debug Utilities**: Extended timeouts, detailed coverage reports, test isolation
+- **Mock Management**: CLI output mocking, external dependency mocking
+
 ## 🎯 Frontend Visualization Philosophy
 
 ### Core Principles - 不偏离初心
@@ -365,6 +450,95 @@ src/
 - ✅ Pattern recognition: 23+ design patterns including async, decorators, context managers
 - ✅ Diagram generation: 4 types of Mermaid diagrams with GitHub compatibility
 - ✅ Cache persistence: 24-hour TTL with content-based invalidation
+
+## Debugging and Troubleshooting
+
+### Common Development Issues
+
+**Test Failures**:
+```bash
+# Run single test with verbose output
+pnpm vitest run tests/unit/analyzer.test.ts --reporter=verbose
+
+# Run tests with extended timeout
+pnpm vitest run --testTimeout=60000
+
+# Debug flaky tests by running multiple times
+pnpm vitest run tests/unit/errorCollector.test.ts --repeat=10
+```
+
+**Coverage Issues**:
+```bash
+# Generate detailed coverage report
+pnpm test:coverage
+open coverage/index.html  # View detailed coverage analysis
+
+# Check specific module coverage
+pnpm vitest run tests/unit/analyzer.test.ts --coverage
+```
+
+**Analysis Pipeline Issues**:
+```bash
+# Debug analysis with verbose logging
+pnpm analyze:verbose ./examples/python-project
+
+# Test analysis with specific error handling
+DEBUG=true pnpm dev analyze ./test-project --verbose
+
+# Check cache status and clear if needed
+ls -la .insight-cache/  # Inspect cache contents
+rm -rf .insight-cache/  # Clear cache if corrupted
+```
+
+**Docker Development Issues**:
+```bash
+# Rebuild containers from scratch
+pnpm docker:clean && pnpm docker:dev:rebuild
+
+# Check container logs
+docker logs insight-dev
+
+# Access container for debugging
+docker exec -it insight-dev sh
+```
+
+### Performance Debugging
+
+**Slow Test Execution**:
+- Use `pnpm test:debug` to identify slow tests
+- Run specific test suites: `pnpm test:unit` (faster than full suite)
+- Check for timeout issues in complex parsing tests
+
+**Analysis Performance**:
+- Monitor cache hit rates (should be >80% on repeated runs)
+- Check file size limits (10MB max per file)
+- Use `--max-files` flag to limit scope during debugging
+
+**Memory Issues**:
+- Large repositories may hit Node.js memory limits
+- Use `node --max-old-space-size=4096` for large projects
+- Monitor memory usage during testing with `--reporter=verbose`
+
+### Environment Setup Issues
+
+**Node.js Version**:
+```bash
+node --version  # Must be 20.0.0+
+nvm use 20      # Switch to Node 20 if using nvm
+```
+
+**pnpm Issues**:
+```bash
+pnpm --version  # Must be 8.0.0+
+npm install -g pnpm@latest  # Update pnpm if needed
+rm -rf node_modules pnpm-lock.yaml && pnpm install  # Clean reinstall
+```
+
+**TypeScript/Build Issues**:
+```bash
+pnpm type-check  # Validate TypeScript without building
+pnpm clean && pnpm build  # Clean build from scratch
+```
 
 ### Quality Assurance
 - 📊 **Architecture Foundation**: Plugin-ready system for language expansion
