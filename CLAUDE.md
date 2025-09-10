@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Last Updated**: Enhanced with comprehensive development workflows, testing strategies, and debugging guidance.
+
 ## Project Overview
 
 **Insight** is an AI-powered legacy code documentation generator that automatically analyzes codebases and generates comprehensive, multi-dimensional documentation. The project uses Node.js/TypeScript with pnpm package management.
